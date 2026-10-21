@@ -38,6 +38,7 @@ Object.assign(TEXT.pt, {
   usesAvoided: x => `Usa ${x}, que estás a evitar hoje`,
   allAvoided: 'Todos os percursos encontrados usam transportes que estás a evitar hoje.',
   tripAvoided: x => `Estás a evitar ${x} hoje. Confirma se está a circular antes de saíres.`,
+  startJourney: 'Começar viagem',
   showOnMap: 'Ver no mapa', mapBtn: 'Mapa', mapLabel: 'Mapa do percurso',
   mapHint: 'Toca no mapa para escolher a partida ou o destino. Podes arrastar os pontos.',
   mapFrom: 'Partir daqui', mapTo: 'Ir para aqui', mapPoint: 'Ponto no mapa',
@@ -76,6 +77,7 @@ Object.assign(TEXT.en, {
   usesAvoided: x => `Uses ${x}, which you're avoiding today`,
   allAvoided: 'Every route found uses transport you’re avoiding today.',
   tripAvoided: x => `You’re avoiding ${x} today. Check it’s running before you leave.`,
+  startJourney: 'Start journey',
   showOnMap: 'Show on map', mapBtn: 'Map', mapLabel: 'Route map',
   mapHint: 'Tap the map to choose the start or destination. You can drag the pins.',
   mapFrom: 'Leave from here', mapTo: 'Go here', mapPoint: 'Point on the map',
@@ -319,9 +321,9 @@ function cmStop(leg) {
 }
 
 /* Live data for CM buses: match by line + scheduled time at the boarding stop. */
-async function enrichLive() {
-  if (!plan.results) return;
-  const legs = plan.results.flatMap(it => it.legs.filter(l => isTransit(l) && cmStop(l)));
+async function enrichLive(list = plan.results) {
+  if (!list) return;
+  const legs = list.flatMap(it => it.legs.filter(l => isTransit(l) && cmStop(l)));
   const stops = [...new Set(legs.map(cmStop))];
   if (!stops.length) return;
   await Promise.all(stops.map(id => loadArrivals(id)));
@@ -423,35 +425,41 @@ function localInputValue(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/* Ask the journey planner for routes (also used by journey mode to recalculate). */
+async function fetchItins(from, to, { time = null, arriveBy = false } = {}) {
+  const u = new URL(PLAN_API);
+  u.searchParams.set('fromPlace', `${from.lat},${from.lon}`);
+  u.searchParams.set('toPlace', `${to.lat},${to.lon}`);
+  u.searchParams.set('detailedTransfers', 'false');
+  u.searchParams.set('language', state.lang);
+  if (time) { u.searchParams.set('time', new Date(time * 1000).toISOString()); u.searchParams.set('arriveBy', String(arriveBy)); }
+  const modes = allowedModes(time || nowS());
+  if (modes) u.searchParams.set('transitModes', modes.join(','));
+  let r = await fetch(u);
+  // If the planner doesn't accept the mode list, ask again without it (routes are still flagged).
+  if (!r.ok && modes && r.status >= 400 && r.status < 500) { u.searchParams.delete('transitModes'); r = await fetch(u); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return {
+    itineraries: (j.itineraries || []).filter(it => Array.isArray(it.legs) && it.legs.length),
+    direct: (j.direct || []).find(d => d.legs?.length === 1 && d.legs[0].mode === 'WALK') || null,
+  };
+}
+
 async function runPlan() {
   const status = $('#planStatus');
   if (!plan.from) { if ($('#planFrom').value.trim()) return resolveField('from'); status.textContent = t('needFrom'); return; }
   if (!plan.to) { if ($('#planTo').value.trim()) return resolveField('to'); status.textContent = t('needTo'); return; }
   const mode = $('#whenMode').value;
-  const u = new URL(PLAN_API);
-  u.searchParams.set('fromPlace', `${plan.from.lat},${plan.from.lon}`);
-  u.searchParams.set('toPlace', `${plan.to.lat},${plan.to.lon}`);
-  u.searchParams.set('detailedTransfers', 'false');
-  u.searchParams.set('language', state.lang);
-  if (mode !== 'now' && $('#whenTime').value) {
-    u.searchParams.set('time', new Date($('#whenTime').value).toISOString());
-    u.searchParams.set('arriveBy', String(mode === 'arrive'));
-  }
-  const planTs = mode !== 'now' && $('#whenTime').value ? Date.parse(new Date($('#whenTime').value).toISOString()) / 1000 : nowS();
-  const modes = allowedModes(planTs);
-  if (modes) u.searchParams.set('transitModes', modes.join(','));
+  const time = mode !== 'now' && $('#whenTime').value ? Date.parse(new Date($('#whenTime').value).toISOString()) / 1000 : null;
   const id = ++plan.req;
   status.textContent = t('planning');
   $('#planBtn').disabled = true;
   try {
-    let r = await fetch(u);
-    // If the planner doesn't accept the mode list, ask again without it (routes are still flagged below).
-    if (!r.ok && modes && r.status >= 400 && r.status < 500) { u.searchParams.delete('transitModes'); r = await fetch(u); }
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
+    const res = await fetchItins(plan.from, plan.to, { time, arriveBy: mode === 'arrive' });
     if (id !== plan.req) return;
-    plan.results = (j.itineraries || []).filter(it => Array.isArray(it.legs) && it.legs.length);
-    plan.direct = (j.direct || []).find(d => d.legs?.length === 1 && d.legs[0].mode === 'WALK') || null;
+    plan.results = res.itineraries;
+    plan.direct = res.direct;
     plan.at = Date.now(); plan.mode = mode; plan.open = new Set(); plan.selected = null;
     status.textContent = '';
     renderPlan();
@@ -598,6 +606,10 @@ function renderSteps(it) {
     ol.append(li);
   });
   box.append(ol);
+
+  const goBtn = el('button', 'primary start-journey', t('startJourney')); goBtn.type = 'button';
+  goBtn.addEventListener('click', () => { if (typeof startJourney === 'function') startJourney(it); });
+  box.append(goBtn);
 
   const mapBtn = el('button', 'ghost show-on-map', t('showOnMap')); mapBtn.type = 'button';
   mapBtn.addEventListener('click', () => {

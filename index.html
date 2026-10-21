@@ -178,6 +178,29 @@
     </form>
   </dialog>
 
+  <dialog id="journey" class="journey" aria-labelledby="jTitle">
+    <div class="j-inner">
+      <header class="j-head">
+        <div>
+          <p class="j-to" id="jTitle"></p>
+          <p class="j-eta" id="jEta"></p>
+        </div>
+        <button type="button" class="ghost" id="jEnd" data-i18n="jEnd">Terminar</button>
+      </header>
+      <div id="jBanner" class="j-banner" role="status" hidden></div>
+      <section id="jNow" class="j-now" aria-live="polite"></section>
+      <div class="j-actions">
+        <button type="button" id="jNext" class="primary big"></button>
+        <button type="button" id="jRecalc" class="ghost" data-i18n="jRecalc">Recalcular daqui</button>
+      </div>
+      <label class="j-gps"><input type="checkbox" id="jGps"> <span data-i18n="jGps">Seguir com a minha localização</span></label>
+      <p id="jGpsStatus" class="hint j-gps-status"></p>
+      <div id="jMap" class="j-map"></div>
+      <p class="j-next-title" data-i18n="jNext">Depois</p>
+      <ol id="jSteps" class="j-steps"></ol>
+    </div>
+  </dialog>
+
   <template id="tripTpl">
     <article class="trip">
       <header class="trip-head">
@@ -199,5 +222,6 @@
   <script src="app.js"></script>
   <script src="planner.js"></script>
   <script src="map.js"></script>
+  <script src="journey.js"></script>
 </body>
 </html>

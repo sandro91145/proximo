@@ -35,6 +35,16 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
   choose *Partir daqui* / *Ir para aqui*, and the selected route drawn per leg (coloured lines for
   transit, dashed for walking, dots where you get on and off). *Ver no mapa* on any option shows it.
 
+**Journey mode** (*Começar viagem* on any route)
+- Step-by-step screen: walk to the stop, wait (with countdown to departure, live where available),
+  ride (minutes and stops left, *Sai na próxima!* near your stop), next steps and a small map.
+- Without location: follows the timetable; you tap *Cheguei* / *Já entrei* / *Já saí*, and it tells you
+  when you're behind schedule.
+- With *Seguir com a minha localização* (while the app is open; keeps the screen on where supported):
+  moves through the steps by itself, warns before your stop, and recalculates from where you are when
+  you miss a connection (at most every 2 minutes). *Recalcular daqui* does it on demand.
+- Survives closing the app: reopening it brings the journey back until a few hours after arrival.
+
 **As tuas viagens (saved trips)**
 - Works for stops and stations of every operator: Carris Metropolitana, Carris, Metro, CP, Fertagus,
   Transtejo/Soflusa, MTS and the Barreiro buses. Nearby stops are listed with their operator.

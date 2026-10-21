@@ -1,7 +1,7 @@
 // Caches the app itself so it opens instantly and offline.
 // Live departures are never cached: they always come from the network.
-const VERSION = 'proximo-v8';
-const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'planner.js', 'map.js', 'manifest.webmanifest',
+const VERSION = 'proximo-v9';
+const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'planner.js', 'map.js', 'journey.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

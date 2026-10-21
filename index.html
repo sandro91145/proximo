@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Próximo</title>
+  <meta name="description" content="Partidas em tempo real das tuas paragens Carris Metropolitana.">
+  <meta name="theme-color" content="#1F3A8A">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7" fill="currentColor"/><path d="M16 8v8l5 3" stroke="#fff" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+      <div class="brand-text">
+        <span class="brand-name">Próximo</span>
+        <span id="updated" class="updated" aria-live="polite"></span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="langBtn" class="ghost" type="button" aria-label="Language">EN</button>
+      <button id="addBtn" class="primary add" type="button" aria-label="Nova viagem"><span class="plus" aria-hidden="true">+</span><span class="add-label" data-i18n="addTrip">Nova viagem</span></button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main id="trips" class="trips"></main>
+
+  <section id="empty" class="empty" hidden>
+    <h1 data-i18n="emptyTitle">Quando sai o teu autocarro?</h1>
+    <p data-i18n="emptyText">Guarda as paragens que usas e vê as próximas partidas em tempo real, com o momento certo para saíres de casa.</p>
+    <button class="primary big" type="button" data-action="add" data-i18n="addFirst">Adicionar a primeira viagem</button>
+  </section>
+
+  <dialog id="editor" class="editor">
+    <form method="dialog" id="editorForm" class="editor-inner">
+      <div class="editor-head">
+        <h2 id="editorTitle" data-i18n="addTrip">Nova viagem</h2>
+        <button type="button" class="ghost icon" data-action="close" aria-label="Fechar">✕</button>
+      </div>
+
+      <div id="stepStop" class="step">
+        <label class="field">
+          <span data-i18n="stopLabel">Paragem</span>
+          <input id="stopSearch" type="search" autocomplete="off" data-i18n-ph="stopPh" placeholder="Nome da paragem ou número">
+        </label>
+        <button type="button" id="nearBtn" class="ghost wide" data-i18n="nearMe">Paragens perto de mim</button>
+        <p id="stopStatus" class="hint"></p>
+        <ul id="stopResults" class="results" role="listbox"></ul>
+      </div>
+
+      <div id="stepDetails" class="step" hidden>
+        <div class="chosen">
+          <div>
+            <strong id="chosenName"></strong>
+            <span id="chosenMeta" class="muted"></span>
+          </div>
+          <button type="button" class="ghost" data-action="changeStop" data-i18n="change">Mudar</button>
+        </div>
+
+        <fieldset class="field">
+          <legend data-i18n="linesLabel">Linhas a mostrar</legend>
+          <p class="hint" data-i18n="linesHint">Sem nenhuma escolhida, mostra todas.</p>
+          <div id="lineChips" class="chips"></div>
+        </fieldset>
+
+        <label class="field">
+          <span data-i18n="nameLabel">Nome da viagem</span>
+          <input id="tripName" type="text" maxlength="40" data-i18n-ph="namePh" placeholder="Casa → trabalho">
+        </label>
+
+        <label class="field">
+          <span data-i18n="walkLabel">Minutos a pé até à paragem</span>
+          <input id="walkMin" type="number" min="0" max="60" step="1" value="5" inputmode="numeric">
+        </label>
+
+        <div class="editor-actions">
+          <button type="button" id="deleteBtn" class="danger" data-i18n="delete" hidden>Apagar</button>
+          <button type="submit" class="primary" data-i18n="save">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="tripTpl">
+    <article class="trip">
+      <header class="trip-head">
+        <div>
+          <h2 class="trip-name"></h2>
+          <p class="trip-stop muted"></p>
+        </div>
+        <button type="button" class="ghost icon" data-action="edit" aria-label="Editar">⋯</button>
+      </header>
+      <div class="trip-alert" hidden></div>
+      <div class="leave">
+        <div class="leave-num"></div>
+        <div class="leave-text"></div>
+      </div>
+      <ol class="deps"></ol>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

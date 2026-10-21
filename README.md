@@ -1,9 +1,20 @@
 # Próximo
 
-Live departures for your Carris Metropolitana stops, with a "leave now" countdown.
+Journey planner for Lisbon public transport, plus live "leave now" countdowns for the trips you make often.
 An installable web app (PWA): one codebase for Android and PC, no build step.
 
 ## What it does
+
+**Para onde vais? (journey planner)**
+- Enter a start and destination (street or place, or your current location) and leave now, leave at, or arrive by a time.
+- Shows the best route first (earliest arrival, then fewest changes), then other options, with when to leave,
+  total time, changes and each step: walk, bus, metro, boat or train, with stops and times.
+- Covers every operator in the Lisbon area (Carris Metropolitana, Carris, Metro, CP, Fertagus,
+  Transtejo/Soflusa, MTS, Barreiro buses). Routes use timetables; Carris Metropolitana buses in a route
+  are checked against their live data (late/early), and CP trains have live data from the planner itself.
+- A route that starts with a Carris Metropolitana bus can be saved as a trip.
+
+**As tuas viagens (saved trips)**
 
 - Save trips in three steps: where you leave from (a street, or your current location),
   the stop (the closest ones to that street are listed first), and the lines you care about.
@@ -49,7 +60,15 @@ Carris Metropolitana open data API: <https://github.com/carrismetropolitana/api>
 Endpoints used: `/stops`, `/lines`, `/locations/localities`, `/locations/municipalities`,
 `/arrivals/by_stop/:id`, `/alerts`. The stop list is cached on the device for a day.
 
+Journey planning: [Transitous](https://transitous.org) (`/api/v5/plan`), a free community service for
+open-source, non-commercial apps; data sources: <https://transitous.org/sources/>. The app credits it on screen
+and only calls it when you press *Ver percursos* (plus at most every 5 minutes while results are open).
+
 Street search: OpenStreetMap Nominatim (searches only when you press Search, max one request
 per second, as their usage policy asks). Walking routes: OpenStreetMap routing (FOSSGIS, foot profile).
 If the route can't be calculated, the app estimates from the straight-line distance instead.
-Both are only used while setting up a trip, not while the app refreshes departures.
+Both are only used while choosing places, not while the app refreshes departures.
+
+## Licence
+
+MIT, see `LICENSE`.

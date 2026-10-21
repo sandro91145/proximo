@@ -25,9 +25,9 @@ const CONFIG = {
 /* ---------- Text (PT / EN) ---------- */
 const TEXT = {
   pt: {
-    addTrip: 'Nova viagem', editTrip: 'Editar viagem', addFirst: 'Adicionar a primeira viagem',
+    addTrip: 'Nova viagem', editTrip: 'Editar viagem', addFirst: 'Adicionar viagem', myTrips: 'As tuas viagens',
     emptyTitle: 'Quando sai o teu autocarro?',
-    emptyText: 'Guarda as paragens que usas e vê as próximas partidas em tempo real, com o momento certo para saíres de casa.',
+    emptyText: 'Guarda os percursos que fazes sempre para veres as próximas partidas em tempo real e quando tens de sair.',
     stopLabel: 'Paragem', stopPh: 'Nome da paragem ou número', nearMe: 'Paragens perto de mim',
     change: 'Mudar', linesLabel: 'Linhas a mostrar', linesHint: 'Sem nenhuma escolhida, mostra todas.',
     nameLabel: 'Nome da viagem', namePh: 'Casa → trabalho', walkLabel: 'Minutos a pé até à paragem',
@@ -55,9 +55,9 @@ const TEXT = {
     walkEst: (m, d) => `Estimativa: cerca de ${m} min (${d} em linha reta). Podes ajustar.`,
   },
   en: {
-    addTrip: 'New trip', editTrip: 'Edit trip', addFirst: 'Add your first trip',
+    addTrip: 'New trip', editTrip: 'Edit trip', addFirst: 'Add a trip', myTrips: 'Your trips',
     emptyTitle: 'When does your bus leave?',
-    emptyText: 'Save the stops you use and see the next departures live, with the right moment to leave home.',
+    emptyText: 'Save the journeys you make often to see the next departures live and when you need to leave.',
     stopLabel: 'Stop', stopPh: 'Stop name or number', nearMe: 'Stops near me',
     change: 'Change', linesLabel: 'Lines to show', linesHint: 'With none selected, all lines are shown.',
     nameLabel: 'Trip name', namePh: 'Home → work', walkLabel: 'Walking minutes to the stop',
@@ -180,7 +180,7 @@ async function loadArrivals(stopId) {
         const sch = Number(a.scheduled_arrival_unix) || 0;
         return {
           line: String(a.line_id), head: a.headsign || '',
-          ts: est || sch, live: !!est, trip: a.trip_id,
+          ts: est || sch, sch, live: !!est, trip: a.trip_id,
         };
       })
       .filter(x => x.ts)
@@ -275,6 +275,7 @@ function applyStaticText() {
   document.documentElement.lang = state.lang;
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); el.setAttribute('aria-label', el.title); });
   $('#langBtn').textContent = state.lang === 'pt' ? 'EN' : 'PT';
   $('#addBtn').setAttribute('aria-label', t('addTrip'));
 }
@@ -287,6 +288,7 @@ function render() {
   wrap.replaceChildren(...state.trips.map(renderTrip));
   renderBanner();
   renderUpdated();
+  window.dispatchEvent(new Event('px:render'));
 }
 
 function renderTrip(trip) {
@@ -386,6 +388,7 @@ function renderUpdated() {
 /* ---------- Refresh loop ---------- */
 let refreshing = false;
 async function refresh() {
+  window.dispatchEvent(new Event('px:refresh')); // the planner refreshes its own live data
   if (refreshing || !state.trips.length) { render(); return; }
   refreshing = true;
   const stopIds = [...new Set(state.trips.map(tr => tr.stopId))];
@@ -732,4 +735,5 @@ async function boot() {
   startLoop();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
-boot();
+// Run after every script (including planner.js) has loaded.
+window.addEventListener('DOMContentLoaded', boot);

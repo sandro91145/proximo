@@ -29,15 +29,65 @@
     </div>
   </header>
 
-  <div id="banner" class="banner" hidden></div>
+  <main class="page">
+    <section id="planner" class="planner" aria-labelledby="planTitle">
+      <h1 id="planTitle" class="planner-title" data-i18n="planTitle">Para onde vais?</h1>
 
-  <main id="trips" class="trips"></main>
+      <div class="od">
+        <div class="od-row">
+          <span class="od-dot from" aria-hidden="true"></span>
+          <input id="planFrom" class="od-input" type="search" autocomplete="off" enterkeyhint="search" data-i18n-ph="planFromPh" placeholder="De: rua ou local">
+          <button type="button" id="planHere" class="ghost icon od-here" data-i18n-title="useHere" title="Usar a minha localização atual" aria-label="Usar a minha localização atual">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+        <ul id="fromPop" class="results od-pop" hidden></ul>
+        <div class="od-row">
+          <span class="od-dot to" aria-hidden="true"></span>
+          <input id="planTo" class="od-input" type="search" autocomplete="off" enterkeyhint="search" data-i18n-ph="planToPh" placeholder="Para: rua ou local">
+          <button type="button" id="swapBtn" class="ghost icon" data-i18n-title="swap" title="Trocar partida e destino" aria-label="Trocar partida e destino">⇅</button>
+        </div>
+        <ul id="toPop" class="results od-pop" hidden></ul>
+      </div>
 
-  <section id="empty" class="empty" hidden>
-    <h1 data-i18n="emptyTitle">Quando sai o teu autocarro?</h1>
-    <p data-i18n="emptyText">Guarda as paragens que usas e vê as próximas partidas em tempo real, com o momento certo para saíres de casa.</p>
-    <button class="primary big" type="button" data-action="add" data-i18n="addFirst">Adicionar a primeira viagem</button>
-  </section>
+      <div id="planPlaces" class="chips plan-places"></div>
+
+      <div class="when">
+        <select id="whenMode" aria-label="Quando">
+          <option value="now" data-i18n="whenNow">Sair agora</option>
+          <option value="depart" data-i18n="whenDepart">Sair às</option>
+          <option value="arrive" data-i18n="whenArrive">Chegar até às</option>
+        </select>
+        <input id="whenTime" type="datetime-local" hidden>
+        <button type="button" id="planBtn" class="primary" data-i18n="planGo">Ver percursos</button>
+      </div>
+
+      <p id="planStatus" class="hint plan-status" aria-live="polite"></p>
+      <ol id="itins" class="itins"></ol>
+
+      <p class="credits">
+        <span data-i18n="creditRoutes">Percursos calculados com</span> <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>
+        (<a href="https://transitous.org/sources/" target="_blank" rel="noopener" data-i18n="creditSources">fontes dos dados</a>).
+        <span data-i18n="creditOsm">Moradas e caminhos a pé</span> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+      </p>
+    </section>
+
+    <section class="mytrips" aria-labelledby="tripsTitle">
+      <div class="mytrips-head">
+        <h2 id="tripsTitle" data-i18n="myTrips">As tuas viagens</h2>
+      </div>
+      <div id="banner" class="banner" hidden></div>
+      <div id="trips" class="trips"></div>
+      <div id="empty" class="empty" hidden>
+        <p data-i18n="emptyText">Guarda os percursos que fazes sempre para veres as próximas partidas em tempo real e quando tens de sair.</p>
+        <button class="ghost" type="button" data-action="add" data-i18n="addFirst">Adicionar viagem</button>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <a href="https://github.com/sandro91145/proximo" target="_blank" rel="noopener" data-i18n="sourceCode">Código e contacto no GitHub</a>
+    </footer>
+  </main>
 
   <dialog id="editor" class="editor">
     <form method="dialog" id="editorForm" class="editor-inner">
@@ -131,5 +181,6 @@
   </template>
 
   <script src="app.js"></script>
+  <script src="planner.js"></script>
 </body>
 </html>

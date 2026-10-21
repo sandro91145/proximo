@@ -27,6 +27,13 @@ Object.assign(TEXT.pt, {
   cancelledLeg: 'Cancelado', destination: 'destino', yourStart: 'ponto de partida',
   alsoWalk: (m, d) => `Também podes ir a pé: ${m} min (${d}).`,
   avoidLabel: 'Evitar hoje',
+  strikeTitle: 'Greves e perturbações', strikeNowLine: x => `Greve agora: ${x}`, strikeNextLine: (x, w) => `Próxima greve: ${x}, ${w}`, strikeMore: n => `(+${n})`, today: 'hoje', tomorrow: 'amanhã', allDay: 'todo o dia',
+  fromTo2: (a, b) => `de ${a} a ${b}`, partialShort: 'parcial', minimumServices: x => `Serviços mínimos: ${x}`,
+  readMore: 'Ver notícia', strikeUpdated: x => `Notícias verificadas ${x}.`,
+  strikePill: x => `${x} em greve`, partialPill: x => `${x}: perturbações possíveis`,
+  autoAvoidTitle: 'Greve nas notícias. Toca para usar na mesma.', strikeShort: 'greve', allowedShort: 'permitido',
+  tripStrike: (x, m) => `${x} em greve agora.${m ? ' Serviços mínimos: ' + m + '.' : ''} Confirma antes de saíres.`,
+  tripPartial: x => `${x} com greve parcial: pode haver perturbações.`,
   avoidHint: 'Para dias de greve: os percursos com estes transportes passam para o fim e ficam marcados. Volta ao normal amanhã.',
   usesAvoided: x => `Usa ${x}, que estás a evitar hoje`,
   allAvoided: 'Todos os percursos encontrados usam transportes que estás a evitar hoje.',
@@ -58,6 +65,13 @@ Object.assign(TEXT.en, {
   cancelledLeg: 'Cancelled', destination: 'destination', yourStart: 'starting point',
   alsoWalk: (m, d) => `You could also walk: ${m} min (${d}).`,
   avoidLabel: 'Avoid today',
+  strikeTitle: 'Strikes and disruptions', strikeNowLine: x => `On strike now: ${x}`, strikeNextLine: (x, w) => `Next strike: ${x}, ${w}`, strikeMore: n => `(+${n})`, today: 'today', tomorrow: 'tomorrow', allDay: 'all day',
+  fromTo2: (a, b) => `${a} to ${b}`, partialShort: 'partial', minimumServices: x => `Minimum services: ${x}`,
+  readMore: 'Read the news', strikeUpdated: x => `News checked ${x}.`,
+  strikePill: x => `${x} on strike`, partialPill: x => `${x}: possible disruption`,
+  autoAvoidTitle: 'Strike in the news. Tap to use it anyway.', strikeShort: 'strike', allowedShort: 'allowed',
+  tripStrike: (x, m) => `${x} on strike now.${m ? ' Minimum services: ' + m + '.' : ''} Check before you leave.`,
+  tripPartial: x => `${x} has a partial strike: there may be disruption.`,
   avoidHint: 'For strike days: routes using these move to the end and are flagged. Back to normal tomorrow.',
   usesAvoided: x => `Uses ${x}, which you're avoiding today`,
   allAvoided: 'Every route found uses transport you’re avoiding today.',
@@ -86,12 +100,38 @@ const AVOID_OPS = [
 const RAIL_ALL = ['RAIL', 'SUBURBAN', 'REGIONAL_RAIL', 'REGIONAL_FAST_RAIL', 'HIGHSPEED_RAIL', 'LONG_DISTANCE', 'NIGHT_RAIL'];
 const ALL_TRANSIT = ['BUS', 'COACH', 'TRAM', 'SUBWAY', 'FERRY', ...RAIL_ALL, 'FUNICULAR', 'AERIAL_LIFT', 'CABLE_CAR', 'OTHER'];
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
-function avoidedOps() {
-  const a = store.get('px_avoid', null);
-  return a && a.date === todayStr() ? a.ops : []; // resets automatically the next day
+
+/* Strikes from the news: disruptions.json in this repo, written by the daily news check. */
+const disrupt = { items: [], updated: null, fetched: 0 };
+async function loadDisruptions() {
+  try {
+    const r = await fetch('disruptions.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    disrupt.items = (j.items || []).filter(x => x.operator && x.start && x.end)
+      .map(x => ({ ...x, s: Date.parse(x.start) / 1000, e: Date.parse(x.end) / 1000 }))
+      .filter(x => x.s && x.e && x.e > nowS());
+    disrupt.updated = j.updated ? Date.parse(j.updated) / 1000 : null;
+  } catch { /* keep what we had; the app works without it */ }
+  disrupt.fetched = Date.now();
+  renderAvoid(); renderStrikes(); render();
 }
-function setAvoided(ops) { store.set('px_avoid', { date: todayStr(), ops }); }
+// Strike affecting an operator at a moment (full = no normal service; partial = some service affected).
+const strikeAt = (key, ts, scope) => disrupt.items.find(x => x.operator === key && x.s <= ts && ts < x.e && (!scope || (x.scope || 'full') === scope));
+
+/* Avoided operators: ticked by you, plus any with a full strike from the news (unless you allowed it). */
+function avoidPrefs() {
+  const a = store.get('px_avoid', null);
+  return a && a.date === todayStr() ? { ops: a.ops || [], allow: a.allow || [] } : { ops: [], allow: [] }; // resets each day
+}
+function setAvoided(ops, allow = avoidPrefs().allow) { store.set('px_avoid', { date: todayStr(), ops, allow }); }
+function avoidedOps(ts = nowS()) {
+  const p = avoidPrefs();
+  const auto = AVOID_OPS.filter(o => strikeAt(o.key, ts, 'full') && !p.allow.includes(o.key)).map(o => o.key);
+  return [...new Set([...p.ops, ...auto])];
+}
 const opLabel = o => (state.lang === 'en' && o.labelEn) || o.label;
+const opByKey = k => AVOID_OPS.find(o => o.key === k);
 
 // Which operator runs a transit leg (or a saved trip's stop).
 function opOfText(text) {
@@ -102,17 +142,25 @@ function opOfText(text) {
   return null;
 }
 const legOp = leg => opOfText(`${leg.from?.stopId || ''} ${leg.agencyName || ''}`);
+
+// For a route: operators to avoid at the time each leg runs, and softer warnings (partial strikes).
 function avoidedIn(it) {
-  const av = avoidedOps();
-  if (!av.length) return [];
-  const hit = new Set();
-  it.legs.filter(isTransit).forEach(l => { const o = legOp(l); if (o && av.includes(o.key)) hit.add(o); });
-  return [...hit];
+  const p = avoidPrefs();
+  const avoid = new Map(), warn = new Map();
+  it.legs.filter(isTransit).forEach(l => {
+    const o = legOp(l); if (!o) return;
+    const ts = isoS(l.startTime);
+    const full = strikeAt(o.key, ts, 'full');
+    if (p.ops.includes(o.key)) avoid.set(o.key, { op: o, item: full || null });
+    else if (full && !p.allow.includes(o.key)) avoid.set(o.key, { op: o, item: full });
+    else { const part = strikeAt(o.key, ts, 'partial'); if (part) warn.set(o.key, { op: o, item: part }); }
+  });
+  return { avoid: [...avoid.values()], warn: [...warn.values()] };
 }
 
 // Modes the planner can leave out entirely (only when every operator of that mode is avoided).
-function allowedModes() {
-  const av = avoidedOps();
+function allowedModes(ts) {
+  const av = avoidedOps(ts);
   if (!av.length) return null;
   let modes = [...ALL_TRANSIT];
   const drop = list => { modes = modes.filter(m => !list.includes(m)); };
@@ -124,23 +172,96 @@ function allowedModes() {
 }
 
 function renderAvoid() {
-  const av = avoidedOps();
+  const p = avoidPrefs();
+  const now = nowS();
   const box = $('#avoidChips');
   box.replaceChildren(...AVOID_OPS.map(o => {
-    const b = el('button', 'chip avoid-chip', opLabel(o)); b.type = 'button';
-    b.setAttribute('aria-pressed', String(av.includes(o.key)));
+    const news = strikeAt(o.key, now, 'full');
+    const on = p.ops.includes(o.key) || (news && !p.allow.includes(o.key));
+    const b = el('button', 'chip avoid-chip' + (news ? ' from-news' : ''), opLabel(o)); b.type = 'button';
+    b.setAttribute('aria-pressed', String(!!on));
+    if (news) { b.title = t('autoAvoidTitle'); b.append(el('small', null, on ? t('strikeShort') : t('allowedShort'))); }
     b.addEventListener('click', () => {
-      const now = avoidedOps();
-      setAvoided(now.includes(o.key) ? now.filter(k => k !== o.key) : [...now, o.key]);
+      const q = avoidPrefs();
+      if (news) {
+        // Strike from the news: tap to allow it anyway, tap again to avoid it again.
+        if (on) setAvoided(q.ops.filter(k => k !== o.key), [...q.allow, o.key]);
+        else setAvoided(q.ops, q.allow.filter(k => k !== o.key));
+      } else {
+        setAvoided(q.ops.includes(o.key) ? q.ops.filter(k => k !== o.key) : [...q.ops, o.key], q.allow);
+      }
       renderAvoid();
       render(); // saved trips show the warning too
       if (plan.from && plan.to && plan.results) runPlan();
     });
     return b;
   }));
-  const names = AVOID_OPS.filter(o => av.includes(o.key)).map(opLabel);
+  const names = AVOID_OPS.filter(o => avoidedOps(now).includes(o.key)).map(opLabel);
   $('#avoidSummary').textContent = names.length ? `: ${names.join(', ')}` : '';
   $('#avoidBox').classList.toggle('active', names.length > 0);
+}
+
+/* The strike notice at the top of the planner: today and the next 7 days. */
+function dayLabel(ts) {
+  const d = new Date(ts * 1000), today = new Date();
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 864e5);
+  if (days === 0) return t('today');
+  if (days === 1) return t('tomorrow');
+  return d.toLocaleDateString(state.lang === 'pt' ? 'pt-PT' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function windowText(x) {
+  const s = new Date(x.s * 1000), e = new Date(x.e * 1000);
+  const midnight = d => d.getHours() === 0 && d.getMinutes() === 0;
+  const sameDay = x.e - x.s <= 86400 && (midnight(e) ? new Date(x.e * 1000 - 1).getDate() === s.getDate() : e.getDate() === s.getDate());
+  if (sameDay && midnight(s) && (midnight(e) || x.e - x.s >= 86400 - 60)) return `${dayLabel(x.s)}, ${t('allDay')}`;
+  if (sameDay) return `${dayLabel(x.s)}, ${clock(x.s)}–${clock(x.e)}`;
+  return t('fromTo2', dayLabel(Math.max(x.s, nowS())), dayLabel(x.e - 1));
+}
+function renderStrikes() {
+  const box = $('#strikeNotice');
+  if (!box) return;
+  const now = nowS(), horizon = now + 7 * 86400;
+  const list = disrupt.items.filter(x => x.s < horizon).sort((a, b) => a.s - b.s);
+  if (!list.length) { box.hidden = true; box.replaceChildren(); return; }
+  box.hidden = false;
+  const items = list.map(x => {
+    const o = opByKey(x.operator);
+    const li = el('li', x.s <= now ? 'now' : '');
+    const head = el('strong', null, `${o ? opLabel(o) : x.operator}: ${x.title}`);
+    li.append(head, el('span', 'strike-when', windowText(x) + ((x.scope || 'full') === 'partial' ? ` (${t('partialShort')})` : '')));
+    if (x.minimum) li.append(el('span', 'strike-min', t('minimumServices', x.minimum)));
+    if (x.source) { const a = el('a', 'strike-src', t('readMore')); a.href = x.source; a.target = '_blank'; a.rel = 'noopener'; li.append(a); }
+    return li;
+  });
+  const ul = el('ul', 'strike-list'); ul.append(...items);
+  const foot = el('p', 'strike-foot', disrupt.updated ? t('strikeUpdated', `${dayLabel(disrupt.updated)} ${clock(disrupt.updated)}`) : '');
+  // One line that says what matters now; tap for minimum services, sources and the next days.
+  const current = list.filter(x => x.s <= now);
+  const first = current[0] || list[0];
+  const o1 = opByKey(first.operator);
+  const name1 = o1 ? opLabel(o1) : first.operator;
+  const line = current.length
+    ? t('strikeNowLine', current.map(x => { const o = opByKey(x.operator); return o ? opLabel(o) : x.operator; }).filter((v, i, a) => a.indexOf(v) === i).join(', '))
+    : t('strikeNextLine', name1, windowText(first));
+  const more = list.length - (current.length || 1);
+  const details = el('details', 'strike-details');
+  details.open = !!box.querySelector('details[open]');
+  const sum = el('summary', 'strike-sum');
+  sum.append(el('span', 'strike-dot' + (current.length ? ' now' : '')), el('span', null, line + (more > 0 ? ` ${t('strikeMore', more)}` : '')));
+  details.append(sum, ul, foot);
+  box.replaceChildren(details);
+}
+
+// Message for a saved trip on an operator that's avoided or on strike now.
+function tripNotice(o) {
+  if (!o) return null;
+  const now = nowS();
+  const p = avoidPrefs();
+  const full = strikeAt(o.key, now, 'full'), part = strikeAt(o.key, now, 'partial');
+  if (full && !p.allow.includes(o.key)) return t('tripStrike', opLabel(o), full.minimum);
+  if (p.ops.includes(o.key)) return t('tripAvoided', opLabel(o));
+  if (part) return t('tripPartial', opLabel(o));
+  return null;
 }
 
 /* ---------- State ---------- */
@@ -316,7 +437,8 @@ async function runPlan() {
     u.searchParams.set('time', new Date($('#whenTime').value).toISOString());
     u.searchParams.set('arriveBy', String(mode === 'arrive'));
   }
-  const modes = allowedModes();
+  const planTs = mode !== 'now' && $('#whenTime').value ? Date.parse(new Date($('#whenTime').value).toISOString()) / 1000 : nowS();
+  const modes = allowedModes(planTs);
   if (modes) u.searchParams.set('transitModes', modes.join(','));
   const id = ++plan.req;
   status.textContent = t('planning');
@@ -348,7 +470,7 @@ function orderItins() {
   let list = plan.results.map(it => ({ it, leave: leaveTs(it), end: isoS(it.endTime) }));
   if (plan.mode !== 'arrive') list = list.filter(x => x.leave >= now - 60);
   if (!list.length) return [];
-  list.forEach(x => { x.avoided = avoidedIn(x.it); });
+  list.forEach(x => { const r = avoidedIn(x.it); x.avoided = r.avoid; x.warn = r.warn; });
   // Routes using an operator you're avoiding today go last, flagged, and are never "best".
   const ok = list.filter(x => !x.avoided.length);
   const flagged = list.filter(x => x.avoided.length).sort((a, b) => a.leave - b.leave);
@@ -401,7 +523,7 @@ function _renderPlan() {
   }
 }
 
-function renderItin({ it, leave, best, avoided = [] }) {
+function renderItin({ it, leave, best, avoided = [], warn = [] }) {
   const key = itinKey(it);
   const li = el('li', 'itin' + (best ? ' best' : '') + (avoided.length ? ' avoided' : ''));
   const sum = el('button', 'itin-sum'); sum.type = 'button';
@@ -418,7 +540,8 @@ function renderItin({ it, leave, best, avoided = [] }) {
 
   const r2 = el('div', 'itin-row2');
   if (best) r2.append(el('span', 'pill-best', t('best')));
-  if (avoided.length) r2.append(el('span', 'pill-avoid', t('usesAvoided', avoided.map(opLabel).join(', '))));
+  avoided.forEach(a => r2.append(el('span', 'pill-avoid', a.item ? t('strikePill', opLabel(a.op)) : t('usesAvoided', opLabel(a.op)))));
+  warn.forEach(a => r2.append(el('span', 'pill-warn', t('partialPill', opLabel(a.op)))));
   r2.append(el('span', null, `${clock(isoS(it.startTime))} – ${clock(isoS(it.endTime))}`), el('span', null, t('transfers', it.transfers || 0)));
 
   const legsEl = el('div', 'itin-legs');
@@ -461,6 +584,12 @@ function renderSteps(it) {
       if (l.cancelled) board.append(' ', el('strong', 'late', t('cancelledLeg')));
       else if (l._live) board.append(' ', liveNote(l._live.ts, l._live.delay));
       else if (l.realTime) board.append(' ', liveNote(isoS(l.startTime), Math.round((isoS(l.startTime) - sched) / 60)));
+      const so = legOp(l);
+      const st = so && (strikeAt(so.key, isoS(l.startTime), 'full') || strikeAt(so.key, isoS(l.startTime), 'partial'));
+      if (st) {
+        const w = el('div', 'step-strike', `${st.title}${st.minimum ? '. ' + t('minimumServices', st.minimum) : ''}`);
+        li.append(w);
+      }
       const n = (l.intermediateStops?.length || 0) + 1;
       const off = el('div', 'step-meta', `${t('alightAt', l.to?.name || '', clock(isoS(l.endTime)))}, ${t('stopsCount', n)}`);
       if (l.agencyName) off.append(el('span', 'step-agency', ` (${l.agencyName})`));
@@ -550,5 +679,6 @@ window.addEventListener('px:refresh', () => {
 // Restore the last start and destination.
 if (plan.from) $('#planFrom').value = placeText(plan.from);
 if (plan.to) $('#planTo').value = placeText(plan.to);
-window.addEventListener('DOMContentLoaded', () => { renderPlanPlaces(); renderAvoid(); });
-$('#langBtn').addEventListener('click', () => setTimeout(renderAvoid, 0));
+window.addEventListener('DOMContentLoaded', () => { renderPlanPlaces(); renderAvoid(); loadDisruptions(); });
+window.addEventListener('px:refresh', () => { if (Date.now() - disrupt.fetched > 15 * 60000) loadDisruptions(); });
+$('#langBtn').addEventListener('click', () => setTimeout(() => { renderAvoid(); renderStrikes(); }, 0));

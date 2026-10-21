@@ -430,8 +430,36 @@ button, input { font: inherit; color: inherit; }
 .avoid .hint { margin: 0 0 8px; }
 .avoid .chips { padding-bottom: 12px; }
 .avoid-chip { font-weight: 700; min-width: 0; }
-.avoid-chip[aria-pressed="true"] { background: var(--hurry); color: #fff; border-color: var(--hurry); text-decoration: line-through; }
+.avoid-chip[aria-pressed="true"] { background: var(--hurry); color: #fff; border-color: var(--hurry); }
 .pill-avoid { background: var(--hurry-soft); color: var(--hurry); font-weight: 700; border-radius: 6px; padding: 1px 8px 0; }
 .itin.avoided .itin-leave, .itin.avoided .itin-dur { color: var(--muted); }
 .itin.avoided .itin-legs { opacity: 0.6; }
 .avoid-note { margin: 0; font-weight: 600; }
+
+/* ---------- Strikes from the news ---------- */
+.strike-notice {
+  margin: -4px 0 14px; padding: 0 12px;
+  border-radius: var(--radius-ctl); background: var(--hurry-soft); border-left: 4px solid var(--hurry);
+}
+.strike-title { margin: 0 0 6px; font-weight: 800; color: var(--hurry); }
+.strike-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.strike-list li { display: grid; gap: 1px; font-size: 0.9rem; }
+.strike-list li.now strong::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--hurry); margin-right: 6px; vertical-align: 1px; }
+.strike-when, .strike-min { color: var(--ink); }
+.strike-min { font-size: 0.85rem; }
+.strike-src { font-size: 0.82rem; color: var(--hurry); font-weight: 600; width: fit-content; }
+.strike-foot { margin: 8px 0 0; font-size: 0.75rem; color: var(--muted); }
+.strike-foot:empty { display: none; }
+.avoid-chip small { display: block; font-size: 0.68rem; font-weight: 700; text-decoration: none; opacity: 0.9; }
+.avoid-chip.from-news { border-style: dashed; }
+.pill-warn { background: var(--cobalt-soft); color: var(--ink); font-weight: 700; border-radius: 6px; padding: 1px 8px 0; }
+.step-strike { margin-top: 3px; font-size: 0.85rem; font-weight: 600; color: var(--hurry); }
+
+.strike-sum { cursor: pointer; padding: 10px 0; font-weight: 700; color: var(--hurry); display: flex; align-items: center; gap: 8px; list-style: none; }
+.strike-sum::-webkit-details-marker { display: none; }
+.strike-sum::after { content: "▾"; margin-left: auto; transition: transform 0.2s; }
+.strike-details[open] .strike-sum::after { transform: rotate(180deg); }
+.strike-dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--hurry); flex: none; }
+.strike-dot.now { background: var(--hurry); }
+.strike-details .strike-list { padding-bottom: 4px; }
+.strike-details .strike-foot { padding-bottom: 10px; }

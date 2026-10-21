@@ -17,7 +17,20 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
   Carris, Carris Metropolitana, TCB). Routes using them move to the end with a warning and are never
   marked best; the planner also leaves out Metro / MTS / boat / train modes where it can, so it looks
   for other options. Saved trips on those operators show a warning. It resets the next day.
-  The app can't detect strikes by itself: the routes come from timetables.
+- Strikes from the news: `disruptions.json` in this repo lists strikes and major disruptions for
+  today and the next days. It's updated every morning by a scheduled news check. The app shows them at the
+  top of the planner, avoids an operator automatically while a full strike is on (tap it under
+  *Evitar hoje* to use it anyway), warns on partial strikes, and marks affected routes and saved trips.
+
+### disruptions.json format
+
+```json
+{ "updated": "ISO time", "items": [ {
+  "operator": "metro | mts | boat | cp | fertagus | cm | carris | tcb",
+  "kind": "strike | disruption", "scope": "full | partial",
+  "title": "short Portuguese title", "start": "ISO time", "end": "ISO time",
+  "minimum": "minimum services, or empty", "source": "news URL" } ] }
+```
 - Interactive map (button *Mapa*): start and destination pins you can drag, tap anywhere to
   choose *Partir daqui* / *Ir para aqui*, and the selected route drawn per leg (coloured lines for
   transit, dashed for walking, dots where you get on and off). *Ver no mapa* on any option shows it.

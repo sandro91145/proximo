@@ -381,9 +381,10 @@ function renderTrip(trip) {
   const alBox = node.querySelector('.trip-alert');
   if (typeof avoidedOps === 'function') {
     const o = opOfText(isCm(trip) ? 'Carris Metropolitana' : `${trip.stopId} ${operatorOf(trip.stopId).name}`);
-    if (o && avoidedOps().includes(o.key)) {
+    const msg = tripNotice(o);
+    if (msg) {
       alBox.hidden = false;
-      alBox.append(Object.assign(document.createElement('p'), { className: 'avoid-note', textContent: t('tripAvoided', opLabel(o)) }));
+      alBox.append(Object.assign(document.createElement('p'), { className: 'avoid-note', textContent: msg }));
     }
   }
   if (al.length) {

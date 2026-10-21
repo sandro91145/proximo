@@ -5,7 +5,10 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
 
 ## What it does
 
-- Save trips: a stop, the lines you care about, and how many minutes you walk to it.
+- Save trips in three steps: where you leave from (a street, or your current location),
+  the stop (the closest ones to that street are listed first), and the lines you care about.
+- The walking time is worked out from a walking route between the street and the stop;
+  you can adjust it. Starting points you've used are offered again next time.
 - Each trip shows the next departures (live where the bus is tracked, otherwise the timetable)
   and how long until you need to leave home.
 - Departures you can no longer catch (closer than your walk time) are greyed out.
@@ -40,8 +43,13 @@ The app tries the direct call first and only uses the proxy if that fails.
 
 After changing files, bump `VERSION` in `sw.js` (e.g. `proximo-v2`) so installed copies pick up the change.
 
-## Data
+## Data and services used
 
 Carris Metropolitana open data API: <https://github.com/carrismetropolitana/api>
 Endpoints used: `/stops`, `/lines`, `/locations/localities`, `/locations/municipalities`,
 `/arrivals/by_stop/:id`, `/alerts`. The stop list is cached on the device for a day.
+
+Street search: OpenStreetMap Nominatim (searches only when you press Search, max one request
+per second, as their usage policy asks). Walking routes: OpenStreetMap routing (FOSSGIS, foot profile).
+If the route can't be calculated, the app estimates from the straight-line distance instead.
+Both are only used while setting up a trip, not while the app refreshes departures.

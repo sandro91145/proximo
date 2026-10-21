@@ -14,6 +14,12 @@ const CONFIG = {
   STOPS_MAX_AGE_MS: 86_400_000, // refresh the stop list once a day
   DEPS_SHOWN: 4,
   STALE_AFTER_S: 120,           // warn if data is older than this
+  // Street search (OpenStreetMap Nominatim). Their policy: max 1 request/s, search on submit only.
+  GEOCODER: 'https://nominatim.openstreetmap.org',
+  // Walking routes (OpenStreetMap / FOSSGIS, foot profile ~5 km/h).
+  WALK_ROUTER: 'https://routing.openstreetmap.de/routed-foot/route/v1/foot',
+  // Fallback estimate when routing fails: straight line x detour factor at 80 m/min.
+  WALK_M_PER_MIN: 80, DETOUR: 1.3,
 };
 
 /* ---------- Text (PT / EN) ---------- */
@@ -29,14 +35,24 @@ const TEXT = {
     loadingStops: 'A carregar paragens…', stopsError: 'Não foi possível carregar as paragens. Verifica a ligação e tenta outra vez.',
     typeMore: 'Escreve pelo menos 2 letras.', noResults: 'Nenhuma paragem encontrada.',
     locating: 'A procurar a tua localização…', locError: 'Sem acesso à localização. Pesquisa pelo nome.',
-    leaveIn: 'até saíres de casa', leaveNow: 'Sai agora', toCatch: (l, t) => `para o ${l} das ${t}`,
-    noneSoon: 'Sem partidas nas próximas horas', noDeps: 'Sem mais partidas hoje nesta paragem.',
+    leaveIn: 'até saíres', leaveNow: 'Sai agora', toCatch: (l, t) => `para o ${l} das ${t}`,
+    noneSoon: 'Nenhuma partida a tempo de apanhares', noDeps: 'Sem mais partidas hoje nesta paragem.',
     loadError: 'Não foi possível obter as partidas. Volta a tentar dentro de momentos.',
     now: 'agora', min: 'min', sched: 'horário', live: 'em tempo real',
     updatedAgo: s => s < 5 ? 'atualizado agora' : `atualizado há ${fmtAgo(s, 'pt')}`,
     stale: s => `sem dados há ${fmtAgo(s, 'pt')}`,
     alertsCount: n => n === 1 ? '1 aviso ativo nas tuas linhas' : `${n} avisos ativos nas tuas linhas`,
     stopNo: 'n.º', all: 'todas',
+    fromLabel: 'De onde sais?', fromPh: 'Rua e número, localidade', search: 'Procurar',
+    fromHint: 'Escreve a rua (com número, se quiseres) e carrega em Procurar.',
+    useHere: 'Usar a minha localização atual', fromShort: 'Partida', searching: 'A procurar…',
+    noPlaces: 'Nenhuma morada encontrada. Experimenta acrescentar a localidade, por exemplo “Almada”.',
+    geoError: 'Não foi possível procurar a morada. Verifica a ligação e tenta outra vez.',
+    currentLoc: 'Localização atual', nearest: 'Paragens mais próximas deste ponto:',
+    fromLine: a => `Partida: ${a}`, fromTo: a => `De ${a}`,
+    walkCalcing: 'A calcular o percurso a pé…',
+    walkCalc: (m, d) => `Calculado pelo percurso a pé: ${m} min (${d}). Podes ajustar.`,
+    walkEst: (m, d) => `Estimativa: cerca de ${m} min (${d} em linha reta). Podes ajustar.`,
   },
   en: {
     addTrip: 'New trip', editTrip: 'Edit trip', addFirst: 'Add your first trip',
@@ -49,14 +65,24 @@ const TEXT = {
     loadingStops: 'Loading stops…', stopsError: 'Couldn’t load the stops. Check your connection and try again.',
     typeMore: 'Type at least 2 letters.', noResults: 'No stops found.',
     locating: 'Finding your location…', locError: 'No location access. Search by name instead.',
-    leaveIn: 'until you leave home', leaveNow: 'Leave now', toCatch: (l, t) => `for the ${l} at ${t}`,
-    noneSoon: 'No departures in the next few hours', noDeps: 'No more departures today at this stop.',
+    leaveIn: 'until you leave', leaveNow: 'Leave now', toCatch: (l, t) => `for the ${l} at ${t}`,
+    noneSoon: 'No departure you can still catch', noDeps: 'No more departures today at this stop.',
     loadError: 'Couldn’t get departures. Retrying shortly.',
     now: 'now', min: 'min', sched: 'timetable', live: 'live',
     updatedAgo: s => s < 5 ? 'updated just now' : `updated ${fmtAgo(s, 'en')} ago`,
     stale: s => `no data for ${fmtAgo(s, 'en')}`,
     alertsCount: n => n === 1 ? '1 active alert on your lines' : `${n} active alerts on your lines`,
     stopNo: 'no.', all: 'all',
+    fromLabel: 'Where do you leave from?', fromPh: 'Street and number, town', search: 'Search',
+    fromHint: 'Type the street (with a number if you like) and press Search.',
+    useHere: 'Use my current location', fromShort: 'Starting point', searching: 'Searching…',
+    noPlaces: 'No address found. Try adding the town, for example “Almada”.',
+    geoError: 'Couldn’t search for the address. Check your connection and try again.',
+    currentLoc: 'Current location', nearest: 'Stops closest to this point:',
+    fromLine: a => `From: ${a}`, fromTo: a => `From ${a}`,
+    walkCalcing: 'Working out the walking route…',
+    walkCalc: (m, d) => `Based on the walking route: ${m} min (${d}). You can adjust it.`,
+    walkEst: (m, d) => `Estimate: about ${m} min (${d} in a straight line). You can adjust it.`,
   },
 };
 
@@ -76,6 +102,7 @@ const store = {
 const state = {
   lang: store.get('px_lang', (navigator.language || 'pt').toLowerCase().startsWith('pt') ? 'pt' : 'en'),
   trips: store.get('px_trips', []),
+  places: store.get('px_places', []), // recent starting points [{label, sub, lat, lon}]
   stops: null,       // [{id, name, place, lat, lon, lines:[]}]
   lines: {},         // id -> {s, c, t, n}
   arrivals: {},      // stopId -> {list:[...], at:unixSeconds, error:bool}
@@ -267,8 +294,8 @@ function renderTrip(trip) {
   node.dataset.id = trip.id;
   const stop = stopById(trip.stopId);
   node.querySelector('.trip-name').textContent = trip.name || trip.stopName;
-  const sub = trip.name ? [trip.stopName] : (stop?.place ? [stop.place] : []);
-  node.querySelector('.trip-stop').textContent = [...sub, `${t('stopNo')} ${trip.stopId}`].join(', ');
+  const stopTxt = trip.name ? `${trip.stopName}, ${t('stopNo')} ${trip.stopId}` : `${t('stopNo')} ${trip.stopId}`;
+  node.querySelector('.trip-stop').textContent = trip.from ? `${t('fromTo', trip.from.label)} \u2192 ${stopTxt}` : stopTxt;
 
   // Alerts
   const al = alertsForTrip(trip);
@@ -378,30 +405,145 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ---------- Editor ---------- */
 const editor = $('#editor');
+const fmtDist = m => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', state.lang === 'pt' ? ',' : '.')} km`;
 
 async function openEditor(trip) {
-  state.editing = trip ? { ...trip, lines: [...trip.lines] } : { id: null, stopId: null, stopName: '', lines: [], name: '', walk: 5 };
+  state.editing = trip
+    ? { ...trip, lines: [...trip.lines] }
+    : { id: null, from: null, stopId: null, stopName: '', lines: [], name: '', walk: 5 };
+  state.editing.walkTouched = !!trip;
   $('#editorTitle').textContent = trip ? t('editTrip') : t('addTrip');
   $('#deleteBtn').hidden = !trip;
-  $('#stopSearch').value = '';
-  $('#stopResults').replaceChildren();
-  showStep(trip ? 'details' : 'stop');
+  $('#fromSearch').value = ''; $('#fromResults').replaceChildren(); $('#fromStatus').textContent = '';
+  $('#stopSearch').value = ''; $('#stopResults').replaceChildren(); $('#stopStatus').textContent = '';
+  $('#walkHint').textContent = '';
+  renderSavedPlaces();
+  showStep(trip ? 'details' : 'from');
   editor.showModal();
   if (trip) fillDetails();
-  else setTimeout(() => $('#stopSearch').focus(), 50);
+  else setTimeout(() => $('#fromSearch').focus(), 50);
   if (!state.stops) {
-    $('#stopStatus').textContent = t('loadingStops');
-    try { await loadNetwork(); $('#stopStatus').textContent = ''; if (trip) fillDetails(); }
+    try { await loadNetwork(); if (trip) fillDetails(); else if (!$('#stepStop').hidden) showNearest(); }
     catch { $('#stopStatus').textContent = t('stopsError'); }
   }
 }
 
 function showStep(which) {
+  $('#stepFrom').hidden = which !== 'from';
   $('#stepStop').hidden = which !== 'stop';
   $('#stepDetails').hidden = which !== 'details';
 }
 
-function renderResults(items, withDistance) {
+/* Step 1: starting point */
+let lastGeo = 0;
+async function nominatim(path, params) {
+  const wait = 1100 - (Date.now() - lastGeo);           // respect 1 request/second
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastGeo = Date.now();
+  const u = new URL(CONFIG.GEOCODER + path);
+  Object.entries({ format: 'jsonv2', addressdetails: 1, 'accept-language': state.lang, ...params })
+    .forEach(([k, v]) => u.searchParams.set(k, v));
+  const r = await fetch(u);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function toPlace(r) {
+  const a = r.address || {};
+  const road = a.road || a.pedestrian || a.footway || a.square || a.residential || r.name;
+  const label = [road, a.house_number].filter(Boolean).join(' ') || (r.display_name || '').split(',')[0];
+  const area = a.suburb || a.neighbourhood || a.quarter || a.city_district;
+  const town = a.city || a.town || a.village || a.municipality;
+  const sub = [...new Set([area, town].filter(Boolean))].join(', ');
+  return { label, sub, lat: +r.lat, lon: +r.lon };
+}
+
+async function searchFrom() {
+  const q = $('#fromSearch').value.trim();
+  const status = $('#fromStatus');
+  if (q.length < 3) { status.textContent = t('typeMore'); return; }
+  status.textContent = t('searching');
+  $('#fromResults').replaceChildren();
+  try {
+    // Bias results to the Lisbon metropolitan area, Portugal only.
+    const res = await nominatim('/search', { q, countrycodes: 'pt', viewbox: '-9.55,39.05,-8.65,38.40', bounded: 0, limit: 8 });
+    const places = (res || []).map(toPlace).filter(p => p.label);
+    status.textContent = places.length ? '' : t('noPlaces');
+    renderPlaceList($('#fromResults'), places);
+  } catch { status.textContent = t('geoError'); }
+}
+
+function useHere() {
+  const status = $('#fromStatus');
+  if (!navigator.geolocation) { status.textContent = t('locError'); return; }
+  status.textContent = t('locating');
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const { latitude: lat, longitude: lon } = pos.coords;
+    let place = { label: t('currentLoc'), sub: '', lat, lon };
+    try { const r = await nominatim('/reverse', { lat, lon, zoom: 18 }); if (r && !r.error) place = { ...toPlace(r), lat, lon }; } catch {}
+    status.textContent = '';
+    chooseFrom(place);
+  }, () => { status.textContent = t('locError'); }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
+function renderPlaceList(ul, places) {
+  ul.replaceChildren(...places.map(p => {
+    const li = document.createElement('li');
+    const b = document.createElement('button'); b.type = 'button';
+    const left = document.createElement('span');
+    const n = document.createElement('span'); n.className = 'res-name'; n.textContent = p.label;
+    const m = document.createElement('span'); m.className = 'res-meta'; m.textContent = p.sub;
+    left.append(n, m); b.append(left);
+    b.addEventListener('click', () => chooseFrom(p));
+    li.append(b); return li;
+  }));
+}
+
+function renderSavedPlaces() {
+  const box = $('#savedPlaces');
+  box.replaceChildren(...state.places.map(p => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip place-chip';
+    b.textContent = p.label;
+    if (p.sub) { const sm = document.createElement('small'); sm.textContent = p.sub; b.append(sm); }
+    b.addEventListener('click', () => chooseFrom(p));
+    return b;
+  }));
+  box.hidden = !state.places.length;
+}
+
+function rememberPlace(p) {
+  const key = x => `${x.lat.toFixed(4)},${x.lon.toFixed(4)}`;
+  state.places = [p, ...state.places.filter(x => key(x) !== key(p))].slice(0, 6);
+  store.set('px_places', state.places);
+}
+
+function chooseFrom(place) {
+  const e = state.editing;
+  e.from = { label: place.label, sub: place.sub || '', lat: place.lat, lon: place.lon };
+  e.walkTouched = false;
+  rememberPlace(e.from);
+  $('#fromName').textContent = [e.from.label, e.from.sub].filter(Boolean).join(', ');
+  $('#stopSearch').value = '';
+  showStep('stop');
+  showNearest();
+}
+
+/* Step 2: stop */
+function distFrom(stop) {
+  const f = state.editing?.from;
+  return f ? haversine(f.lat, f.lon, stop.lat, stop.lon) : null;
+}
+
+function showNearest() {
+  const status = $('#stopStatus');
+  if (!state.stops) { status.textContent = t('loadingStops'); return; }
+  if (!state.editing?.from) { status.textContent = ''; $('#stopResults').replaceChildren(); return; }
+  const items = state.stops.map(s => ({ stop: s, dist: distFrom(s) })).sort((a, b) => a.dist - b.dist).slice(0, 15);
+  status.textContent = t('nearest');
+  renderResults(items);
+}
+
+function renderResults(items) {
   const ul = $('#stopResults');
   ul.replaceChildren(...items.map(({ stop, dist }) => {
     const li = document.createElement('li');
@@ -413,7 +555,7 @@ function renderResults(items, withDistance) {
     m.textContent = [stop.place, lineTxt].filter(Boolean).join(' / ');
     left.append(n, m);
     const side = document.createElement('span'); side.className = 'res-side';
-    side.textContent = withDistance ? (dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`) : `${t('stopNo')} ${stop.id}`;
+    side.textContent = dist != null ? fmtDist(dist) : `${t('stopNo')} ${stop.id}`;
     b.append(left, side);
     b.addEventListener('click', () => chooseStop(stop));
     li.append(b);
@@ -425,7 +567,8 @@ function searchStops(q) {
   if (!state.stops) return;
   const status = $('#stopStatus');
   const qq = fold(q).trim();
-  if (qq.length < 2) { $('#stopResults').replaceChildren(); status.textContent = qq ? t('typeMore') : ''; return; }
+  if (!qq) { showNearest(); return; }
+  if (qq.length < 2) { $('#stopResults').replaceChildren(); status.textContent = t('typeMore'); return; }
   const tokens = qq.split(/\s+/);
   const hits = [];
   for (const s of state.stops) {
@@ -434,9 +577,11 @@ function searchStops(q) {
     if (tokens.every(tok => hay.includes(tok))) hits.push({ stop: s, score: fold(s.name).startsWith(tokens[0]) ? 0 : 1 });
     if (hits.length > 400) break;
   }
-  hits.sort((a, b) => a.score - b.score || a.stop.name.localeCompare(b.stop.name));
+  hits.forEach(h => { h.dist = distFrom(h.stop); });
+  // Closest first when we know the starting point, otherwise best name match.
+  hits.sort((a, b) => a.score - b.score || (a.dist != null ? a.dist - b.dist : a.stop.name.localeCompare(b.stop.name)));
   status.textContent = hits.length ? '' : t('noResults');
-  renderResults(hits.slice(0, 40), false);
+  renderResults(hits.slice(0, 40));
 }
 
 function haversine(a, b, c, d) {
@@ -446,34 +591,51 @@ function haversine(a, b, c, d) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function nearMe() {
-  const status = $('#stopStatus');
-  if (!navigator.geolocation) { status.textContent = t('locError'); return; }
-  status.textContent = t('locating');
-  navigator.geolocation.getCurrentPosition(async pos => {
-    if (!state.stops) { try { await loadNetwork(); } catch { status.textContent = t('stopsError'); return; } }
-    const { latitude: la, longitude: lo } = pos.coords;
-    const items = state.stops
-      .map(s => ({ stop: s, dist: haversine(la, lo, s.lat, s.lon) }))
-      .sort((a, b) => a.dist - b.dist).slice(0, 20);
-    status.textContent = '';
-    renderResults(items, true);
-  }, () => { status.textContent = t('locError'); }, { enableHighAccuracy: true, timeout: 10000 });
-}
-
 function chooseStop(stop) {
   const e = state.editing;
   if (e.stopId !== stop.id) e.lines = [];
   e.stopId = stop.id; e.stopName = stop.name;
+  e.walkTouched = false;
   showStep('details');
   fillDetails();
+  computeWalk(stop);
 }
 
+/* Walking time from the starting point to the stop */
+let walkReq = 0;
+async function computeWalk(stop) {
+  const e = state.editing; const f = e?.from;
+  if (!f || !stop) return;
+  const id = ++walkReq;
+  const straight = haversine(f.lat, f.lon, stop.lat, stop.lon);
+  const est = Math.max(1, Math.ceil(straight * CONFIG.DETOUR / CONFIG.WALK_M_PER_MIN));
+  const setWalk = (m, hint) => {
+    if (id !== walkReq || state.editing !== e) return;
+    if (!e.walkTouched) { e.walk = m; $('#walkMin').value = m; }
+    $('#walkHint').textContent = hint;
+  };
+  setWalk(est, t('walkCalcing'));
+  try {
+    const r = await fetch(`${CONFIG.WALK_ROUTER}/${f.lon},${f.lat};${stop.lon},${stop.lat}?overview=false`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const route = j.routes && j.routes[0];
+    if (!route) throw new Error('no route');
+    const mins = Math.max(1, Math.ceil(route.duration / 60));
+    setWalk(mins, t('walkCalc', mins, fmtDist(route.distance)));
+  } catch {
+    setWalk(est, t('walkEst', est, fmtDist(straight)));
+  }
+}
+
+/* Step 3: details */
 function fillDetails() {
   const e = state.editing;
   const stop = stopById(e.stopId);
   $('#chosenName').textContent = e.stopName;
   $('#chosenMeta').textContent = [stop?.place, `${t('stopNo')} ${e.stopId}`].filter(Boolean).join(', ');
+  $('#chosenFrom').textContent = e.from ? t('fromLine', e.from.label) : '';
+  $('#chosenFrom').hidden = !e.from;
   $('#tripName').value = e.name || '';
   $('#walkMin').value = e.walk ?? 5;
   const chips = $('#lineChips');
@@ -500,11 +662,12 @@ function fillDetails() {
 function saveTrip(ev) {
   ev.preventDefault();
   const e = state.editing;
-  if (!e?.stopId) return;
+  if (!e?.stopId || $('#stepDetails').hidden) return;
   e.name = $('#tripName').value.trim();
   e.walk = Math.max(0, Math.min(60, parseInt($('#walkMin').value, 10) || 0));
-  if (e.id) state.trips = state.trips.map(tr => tr.id === e.id ? e : tr);
-  else { e.id = 't' + Date.now().toString(36); state.trips.push(e); }
+  const { walkTouched, ...trip } = e;
+  if (trip.id) state.trips = state.trips.map(tr => tr.id === trip.id ? trip : tr);
+  else { trip.id = 't' + Date.now().toString(36); state.trips.push(trip); }
   store.set('px_trips', state.trips);
   editor.close();
   render();
@@ -526,7 +689,11 @@ $('#stopSearch').addEventListener('input', ev => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => searchStops(ev.target.value), 150);
 });
-$('#nearBtn').addEventListener('click', nearMe);
+$('#stopSearch').addEventListener('keydown', ev => { if (ev.key === 'Enter') ev.preventDefault(); });
+$('#fromSearch').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); searchFrom(); } });
+$('#fromGo').addEventListener('click', searchFrom);
+$('#fromHere').addEventListener('click', useHere);
+$('#walkMin').addEventListener('input', () => { if (state.editing) state.editing.walkTouched = true; });
 $('#editorForm').addEventListener('submit', saveTrip);
 $('#deleteBtn').addEventListener('click', deleteTrip);
 $('#addBtn').addEventListener('click', () => openEditor(null));
@@ -541,7 +708,13 @@ document.addEventListener('click', ev => {
   const act = a.dataset.action;
   if (act === 'add') openEditor(null);
   if (act === 'close') editor.close();
-  if (act === 'changeStop') { showStep('stop'); $('#stopSearch').focus(); }
+  if (act === 'changeFrom') { renderSavedPlaces(); showStep('from'); $('#fromSearch').focus(); }
+  if (act === 'changeStop') {
+    const f = state.editing?.from;
+    $('#fromName').textContent = f ? [f.label, f.sub].filter(Boolean).join(', ') : '';
+    if (f) { showStep('stop'); showNearest(); $('#stopSearch').focus(); }
+    else { showStep('from'); $('#fromSearch').focus(); }
+  }
   if (act === 'edit') {
     const id = a.closest('.trip')?.dataset.id;
     const trip = state.trips.find(tr => tr.id === id);

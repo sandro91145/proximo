@@ -46,13 +46,34 @@
         <button type="button" class="ghost icon" data-action="close" aria-label="Fechar">✕</button>
       </div>
 
-      <div id="stepStop" class="step">
+      <div id="stepFrom" class="step">
+        <div class="field">
+          <label for="fromSearch" data-i18n="fromLabel">De onde sais?</label>
+          <div class="searchrow">
+            <input id="fromSearch" type="search" autocomplete="street-address" enterkeyhint="search" data-i18n-ph="fromPh" placeholder="Rua e número, localidade">
+            <button type="button" id="fromGo" class="primary" data-i18n="search">Procurar</button>
+          </div>
+          <p class="hint" data-i18n="fromHint">Escreve a rua (com número, se quiseres) e carrega em Procurar.</p>
+        </div>
+        <div id="savedPlaces" class="chips"></div>
+        <button type="button" id="fromHere" class="ghost wide" data-i18n="useHere">Usar a minha localização atual</button>
+        <p id="fromStatus" class="hint" aria-live="polite"></p>
+        <ul id="fromResults" class="results"></ul>
+      </div>
+
+      <div id="stepStop" class="step" hidden>
+        <div class="chosen">
+          <div>
+            <span class="muted" data-i18n="fromShort">Partida</span>
+            <strong id="fromName"></strong>
+          </div>
+          <button type="button" class="ghost" data-action="changeFrom" data-i18n="change">Mudar</button>
+        </div>
         <label class="field">
           <span data-i18n="stopLabel">Paragem</span>
-          <input id="stopSearch" type="search" autocomplete="off" data-i18n-ph="stopPh" placeholder="Nome da paragem ou número">
+          <input id="stopSearch" type="search" autocomplete="off" enterkeyhint="search" data-i18n-ph="stopPh" placeholder="Nome da paragem ou número">
         </label>
-        <button type="button" id="nearBtn" class="ghost wide" data-i18n="nearMe">Paragens perto de mim</button>
-        <p id="stopStatus" class="hint"></p>
+        <p id="stopStatus" class="hint" aria-live="polite"></p>
         <ul id="stopResults" class="results" role="listbox"></ul>
       </div>
 
@@ -61,6 +82,7 @@
           <div>
             <strong id="chosenName"></strong>
             <span id="chosenMeta" class="muted"></span>
+            <span id="chosenFrom" class="muted"></span>
           </div>
           <button type="button" class="ghost" data-action="changeStop" data-i18n="change">Mudar</button>
         </div>
@@ -79,6 +101,7 @@
         <label class="field">
           <span data-i18n="walkLabel">Minutos a pé até à paragem</span>
           <input id="walkMin" type="number" min="0" max="60" step="1" value="5" inputmode="numeric">
+          <span id="walkHint" class="hint" aria-live="polite"></span>
         </label>
 
         <div class="editor-actions">

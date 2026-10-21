@@ -53,24 +53,26 @@
 
       <div id="planPlaces" class="chips plan-places"></div>
 
-      <details id="avoidBox" class="avoid">
-        <summary><span data-i18n="avoidLabel">Evitar hoje</span><span id="avoidSummary" class="avoid-summary"></span></summary>
-        <p class="hint" data-i18n="avoidHint">Para dias de greve: os percursos com estes transportes passam para o fim e ficam marcados. Volta ao normal amanhã.</p>
-        <div id="avoidChips" class="chips"></div>
-      </details>
-
       <div class="when">
-        <select id="whenMode" aria-label="Quando">
+        <select id="whenMode" class="pill" aria-label="Quando">
           <option value="now" data-i18n="whenNow">Sair agora</option>
           <option value="depart" data-i18n="whenDepart">Sair às</option>
           <option value="arrive" data-i18n="whenArrive">Chegar até às</option>
         </select>
         <input id="whenTime" type="datetime-local" hidden>
-        <button type="button" id="mapToggle" class="ghost map-toggle" aria-expanded="false" aria-controls="planMapWrap">
+        <button type="button" id="mapToggle" class="ghost pill map-toggle" aria-expanded="false" aria-controls="planMapWrap">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5V4l-6 2.5L9 4Zm0 0v13m6-10.5v13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
           <span data-i18n="mapBtn">Mapa</span>
         </button>
+        <button type="button" id="avoidToggle" class="ghost pill avoid-toggle" aria-expanded="false" aria-controls="avoidPanel">
+          <span data-i18n="avoidBtn">Evitar</span><span id="avoidSummary" class="avoid-summary"></span>
+        </button>
         <button type="button" id="planBtn" class="primary" data-i18n="planGo">Ver percursos</button>
+      </div>
+
+      <div id="avoidPanel" class="avoid-panel" hidden>
+        <p class="hint" data-i18n="avoidHint">Para dias de greve: os percursos com estes transportes passam para o fim e ficam marcados. Volta ao normal amanhã.</p>
+        <div id="avoidChips" class="chips"></div>
       </div>
 
       <div id="planMapWrap" class="map-wrap" hidden>
@@ -81,11 +83,6 @@
       <p id="planStatus" class="hint plan-status" aria-live="polite"></p>
       <ol id="itins" class="itins"></ol>
 
-      <p class="credits">
-        <span data-i18n="creditRoutes">Percursos calculados com</span> <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>
-        (<a href="https://transitous.org/sources/" target="_blank" rel="noopener" data-i18n="creditSources">fontes dos dados</a>).
-        <span data-i18n="creditOsm">Moradas e caminhos a pé</span> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
-      </p>
     </section>
 
     <section class="mytrips" aria-labelledby="tripsTitle">
@@ -101,6 +98,11 @@
     </section>
 
     <footer class="foot">
+      <p class="credits">
+        <span data-i18n="creditRoutes">Percursos calculados com</span> <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>
+        (<a href="https://transitous.org/sources/" target="_blank" rel="noopener" data-i18n="creditSources">fontes dos dados</a>).
+        <span data-i18n="creditOsm">Moradas e caminhos a pé</span> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.
+      </p>
       <a href="https://github.com/sandro91145/proximo" target="_blank" rel="noopener" data-i18n="sourceCode">Código e contacto no GitHub</a>
     </footer>
   </main>

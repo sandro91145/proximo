@@ -26,7 +26,7 @@ Object.assign(TEXT.pt, {
   liveAt: x => `ao vivo: ${x}`, delayed: m => `${m} min atrasado`, early: m => `${m} min adiantado`, onTime: 'a horas',
   cancelledLeg: 'Cancelado', destination: 'destino', yourStart: 'ponto de partida',
   alsoWalk: (m, d) => `Também podes ir a pé: ${m} min (${d}).`,
-  avoidLabel: 'Evitar hoje',
+  avoidLabel: 'Evitar hoje', avoidBtn: 'Evitar',
   strikeTitle: 'Greves e perturbações', strikeNowLine: x => `Greve agora: ${x}`, strikeNextLine: (x, w) => `Próxima greve: ${x}, ${w}`, strikeMore: n => `(+${n})`, today: 'hoje', tomorrow: 'amanhã', allDay: 'todo o dia',
   fromTo2: (a, b) => `de ${a} a ${b}`, partialShort: 'parcial', minimumServices: x => `Serviços mínimos: ${x}`,
   readMore: 'Ver notícia', strikeUpdated: x => `Notícias verificadas ${x}.`,
@@ -65,7 +65,7 @@ Object.assign(TEXT.en, {
   liveAt: x => `live: ${x}`, delayed: m => `${m} min late`, early: m => `${m} min early`, onTime: 'on time',
   cancelledLeg: 'Cancelled', destination: 'destination', yourStart: 'starting point',
   alsoWalk: (m, d) => `You could also walk: ${m} min (${d}).`,
-  avoidLabel: 'Avoid today',
+  avoidLabel: 'Avoid today', avoidBtn: 'Avoid',
   strikeTitle: 'Strikes and disruptions', strikeNowLine: x => `On strike now: ${x}`, strikeNextLine: (x, w) => `Next strike: ${x}, ${w}`, strikeMore: n => `(+${n})`, today: 'today', tomorrow: 'tomorrow', allDay: 'all day',
   fromTo2: (a, b) => `${a} to ${b}`, partialShort: 'partial', minimumServices: x => `Minimum services: ${x}`,
   readMore: 'Read the news', strikeUpdated: x => `News checked ${x}.`,
@@ -200,7 +200,7 @@ function renderAvoid() {
   }));
   const names = AVOID_OPS.filter(o => avoidedOps(now).includes(o.key)).map(opLabel);
   $('#avoidSummary').textContent = names.length ? `: ${names.join(', ')}` : '';
-  $('#avoidBox').classList.toggle('active', names.length > 0);
+  $('#avoidToggle').classList.toggle('active', names.length > 0);
 }
 
 /* The strike notice at the top of the planner: today and the next 7 days. */
@@ -679,6 +679,11 @@ $('#whenMode').addEventListener('change', ev => {
   }
 });
 $('#planBtn').addEventListener('click', runPlan);
+$('#avoidToggle').addEventListener('click', () => {
+  const panel = $('#avoidPanel');
+  panel.hidden = !panel.hidden;
+  $('#avoidToggle').setAttribute('aria-expanded', String(!panel.hidden));
+});
 
 window.addEventListener('px:render', () => { renderPlan(); });
 window.addEventListener('px:refresh', () => {

@@ -503,3 +503,58 @@ button, input { font: inherit; color: inherit; }
 .j-step.walk { color: var(--muted); }
 .j-step.current { outline: 2px solid var(--cobalt); }
 .j-step-time { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- Calmer layout (all sizes) ---------- */
+.pill {
+  min-height: 38px; border-radius: 999px; padding: 6px 14px;
+  font-size: 0.92rem; font-weight: 600; background: var(--paper); border: 1px solid var(--line);
+}
+.when select.pill { padding: 6px 12px; border-radius: 999px; min-height: 38px; }
+.avoid-toggle.active { background: var(--hurry-soft); border-color: var(--hurry); color: var(--hurry); }
+.avoid-panel { margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--tile); }
+.avoid-panel .hint { margin: 0 0 10px; }
+.foot { display: grid; gap: 8px; }
+.foot .credits { margin: 0; }
+
+/* ---------- Phone ---------- */
+@media (max-width: 600px) {
+  .topbar { padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 8px; }
+  .topbar .ghost, .topbar .primary { min-height: 38px; }
+  #langBtn { border-color: transparent; padding: 6px 8px; }
+  .page { padding: 4px 16px 32px; }
+
+  /* The planner sits on the page itself: no card around it */
+  .planner { background: transparent; padding: 4px 0 0; margin: 0 0 28px; border-radius: 0; }
+  .planner-title { font-size: 1.7rem; margin: 6px 0 14px; }
+  .strike-notice { background: transparent; border-left: 0; padding: 0; margin: -4px 0 12px; }
+  .strike-sum { padding: 2px 0 4px; font-size: 0.95rem; }
+  .strike-details[open] { background: var(--paper); border-radius: 14px; padding: 4px 12px 2px; margin-top: 4px; }
+  .od { background: var(--paper); border-color: transparent; box-shadow: 0 1px 2px rgba(20, 33, 61, 0.06); }
+  .od-row { padding: 0 2px 0 14px; }
+  .od-input { padding: 12px 4px; font-size: 1rem; }
+  .plan-places { margin-top: 12px; }
+  /* One row that always fits: time selector takes the free space, the two buttons size to their text */
+  .when { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; }
+  .when .pill { padding: 6px 12px; white-space: nowrap; }
+  .when select.pill { padding: 6px 10px; border-radius: 999px; min-height: 38px; width: 100%; }
+  .when #whenTime:not([hidden]) { grid-column: 1 / -1; grid-row: 2; }
+  .when .primary { grid-column: 1 / -1; }
+  .avoid-toggle .avoid-summary { display: inline-block; max-width: 7em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+  .when .primary { flex: 1 1 100%; margin-left: 0; min-height: 46px; }
+  .map-wrap { margin-top: 16px; }
+  .plan-status { margin-top: 14px; }
+
+  /* Results get one calm white panel */
+  .itins:not(:empty) { background: var(--paper); border-radius: 16px; padding: 2px 12px; margin-top: 16px; }
+  .itin-sum { padding: 14px 2px; }
+  .best .itin-leave { font-size: 1.55rem; }
+
+  /* Saved trips: slimmer */
+  .mytrips-head h2 { font-size: 1.05rem; margin: 0 0 12px; }
+  .trips { gap: 14px; }
+  .trip { border-top: 0; padding: 14px 14px 6px; border-radius: 16px; }
+  .leave { margin: 10px 0 6px; padding: 10px 12px; gap: 12px; }
+  .leave-num { font-size: 2.6rem; }
+  .dep { padding: 8px 0; }
+  .foot { margin-top: 32px; }
+}

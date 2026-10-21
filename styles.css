@@ -558,3 +558,21 @@ button, input { font: inherit; color: inherit; }
   .dep { padding: 8px 0; }
   .foot { margin-top: 32px; }
 }
+
+/* Recent places: chip + small remove button */
+.place-item { display: inline-flex; align-items: stretch; border: 2px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+.place-item .place-chip { border: 0; border-radius: 0; background: transparent; padding: 5px 4px 3px 10px; }
+.place-remove {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 1.2rem; line-height: 1; padding: 0 10px; min-width: 36px;
+}
+.place-remove:hover, .place-remove:focus-visible { background: var(--cobalt-soft); color: var(--ink); }
+.place-clear {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-weight: 600; font-size: 0.85rem; text-decoration: underline; padding: 6px 4px; align-self: center;
+}
+/* Recent places in the planner: one row you can swipe sideways */
+.plan-places { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; scroll-snap-type: x proximity; }
+.plan-places::-webkit-scrollbar { display: none; }
+.plan-places > * { flex: none; scroll-snap-align: start; }
+.plan-places .place-chip { white-space: nowrap; }

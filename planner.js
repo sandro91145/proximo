@@ -412,12 +412,9 @@ function renderPlanPlaces() {
   const box = $('#planPlaces');
   const used = new Set([plan.from, plan.to].filter(Boolean).map(p => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`));
   const list = state.places.filter(p => !used.has(`${p.lat.toFixed(4)},${p.lon.toFixed(4)}`)).slice(0, 5);
-  box.replaceChildren(...list.map(p => {
-    const b = el('button', 'chip place-chip', p.label); b.type = 'button';
-    if (p.sub) b.append(el('small', null, p.sub));
-    b.addEventListener('click', () => setPlace(plan.active || (plan.from ? 'to' : 'from'), p));
-    return b;
-  }));
+  const items = list.map(p => placeChip(p, q => setPlace(plan.active || (plan.from ? 'to' : 'from'), q)));
+  if (state.places.length > 1) items.push(clearPlacesChip());
+  box.replaceChildren(...items);
   box.hidden = !list.length;
 }
 

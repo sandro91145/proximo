@@ -81,6 +81,7 @@ const TEXT = {
     walkCalc: (m, d) => `Calculado pelo percurso a pé: ${m} min (${d}). Podes ajustar.`,
     walkEst: (m, d) => `Estimativa: cerca de ${m} min (${d} em linha reta). Podes ajustar.`,
     loadingLines: 'A carregar as linhas desta paragem…', noLinesFound: 'Não encontrei partidas nas próximas horas nesta paragem.',
+    removePlace: x => `Remover ${x} dos recentes`, clearPlaces: 'Limpar', clearPlacesConfirm: 'Apagar todos os locais recentes?',
     nearLoading: 'A procurar paragens perto deste ponto…', nearError: 'Não foi possível procurar paragens. Pesquisa pelo nome.',
   },
   en: {
@@ -113,6 +114,7 @@ const TEXT = {
     walkCalc: (m, d) => `Based on the walking route: ${m} min (${d}). You can adjust it.`,
     walkEst: (m, d) => `Estimate: about ${m} min (${d} in a straight line). You can adjust it.`,
     loadingLines: 'Loading the lines at this stop…', noLinesFound: 'No departures found at this stop in the next few hours.',
+    removePlace: x => `Remove ${x} from recent places`, clearPlaces: 'Clear', clearPlacesConfirm: 'Delete all recent places?',
     nearLoading: 'Looking for stops near this point…', nearError: 'Couldn’t look for stops. Search by name instead.',
   },
 };
@@ -595,21 +597,43 @@ function renderPlaceList(ul, places) {
   }));
 }
 
+/* Recent places: a chip to pick it, a small × to remove it, and "Limpar" to remove them all. */
+const placeKey = x => `${x.lat.toFixed(4)},${x.lon.toFixed(4)}`;
+function placeChip(p, onPick) {
+  const wrap = document.createElement('span'); wrap.className = 'place-item';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'chip place-chip';
+  b.textContent = p.label;
+  if (p.sub) { const sm = document.createElement('small'); sm.textContent = p.sub; b.append(sm); }
+  b.addEventListener('click', () => onPick(p));
+  const x = document.createElement('button'); x.type = 'button'; x.className = 'place-remove';
+  x.textContent = '×'; x.setAttribute('aria-label', t('removePlace', p.label)); x.title = x.getAttribute('aria-label');
+  x.addEventListener('click', ev => { ev.stopPropagation(); forgetPlace(p); });
+  wrap.append(b, x);
+  return wrap;
+}
+function clearPlacesChip() {
+  const c = document.createElement('button'); c.type = 'button'; c.className = 'place-clear';
+  c.textContent = t('clearPlaces');
+  c.addEventListener('click', () => { if (confirm(t('clearPlacesConfirm'))) forgetPlace(null); });
+  return c;
+}
+function forgetPlace(p) {
+  state.places = p ? state.places.filter(x => placeKey(x) !== placeKey(p)) : [];
+  store.set('px_places', state.places);
+  renderSavedPlaces();
+  if (typeof renderPlanPlaces === 'function') renderPlanPlaces();
+}
+
 function renderSavedPlaces() {
   const box = $('#savedPlaces');
-  box.replaceChildren(...state.places.map(p => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip place-chip';
-    b.textContent = p.label;
-    if (p.sub) { const sm = document.createElement('small'); sm.textContent = p.sub; b.append(sm); }
-    b.addEventListener('click', () => chooseFrom(p));
-    return b;
-  }));
+  const items = state.places.map(p => placeChip(p, chooseFrom));
+  if (items.length > 1) items.push(clearPlacesChip());
+  box.replaceChildren(...items);
   box.hidden = !state.places.length;
 }
 
 function rememberPlace(p) {
-  const key = x => `${x.lat.toFixed(4)},${x.lon.toFixed(4)}`;
-  state.places = [p, ...state.places.filter(x => key(x) !== key(p))].slice(0, 6);
+  state.places = [p, ...state.places.filter(x => placeKey(x) !== placeKey(p))].slice(0, 6);
   store.set('px_places', state.places);
 }
 

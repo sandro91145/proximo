@@ -421,3 +421,17 @@ button, input { font: inherit; color: inherit; }
   .leaflet-control-attribution { background: rgba(23, 32, 58, 0.8) !important; color: var(--muted); }
   .leaflet-control-attribution a { color: var(--ink); }
 }
+
+/* ---------- Avoid today ---------- */
+.avoid { margin-top: 10px; border: 1.5px solid var(--line); border-radius: var(--radius-ctl); padding: 0 12px; }
+.avoid summary { cursor: pointer; padding: 9px 0; font-weight: 600; font-size: 0.92rem; }
+.avoid.active { border-color: var(--hurry); background: var(--hurry-soft); }
+.avoid.active summary { color: var(--hurry); }
+.avoid .hint { margin: 0 0 8px; }
+.avoid .chips { padding-bottom: 12px; }
+.avoid-chip { font-weight: 700; min-width: 0; }
+.avoid-chip[aria-pressed="true"] { background: var(--hurry); color: #fff; border-color: var(--hurry); text-decoration: line-through; }
+.pill-avoid { background: var(--hurry-soft); color: var(--hurry); font-weight: 700; border-radius: 6px; padding: 1px 8px 0; }
+.itin.avoided .itin-leave, .itin.avoided .itin-dur { color: var(--muted); }
+.itin.avoided .itin-legs { opacity: 0.6; }
+.avoid-note { margin: 0; font-weight: 600; }

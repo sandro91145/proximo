@@ -26,6 +26,11 @@ Object.assign(TEXT.pt, {
   liveAt: x => `ao vivo: ${x}`, delayed: m => `${m} min atrasado`, early: m => `${m} min adiantado`, onTime: 'a horas',
   cancelledLeg: 'Cancelado', destination: 'destino', yourStart: 'ponto de partida',
   alsoWalk: (m, d) => `Também podes ir a pé: ${m} min (${d}).`,
+  avoidLabel: 'Evitar hoje',
+  avoidHint: 'Para dias de greve: os percursos com estes transportes passam para o fim e ficam marcados. Volta ao normal amanhã.',
+  usesAvoided: x => `Usa ${x}, que estás a evitar hoje`,
+  allAvoided: 'Todos os percursos encontrados usam transportes que estás a evitar hoje.',
+  tripAvoided: x => `Estás a evitar ${x} hoje. Confirma se está a circular antes de saíres.`,
   showOnMap: 'Ver no mapa', mapBtn: 'Mapa', mapLabel: 'Mapa do percurso',
   mapHint: 'Toca no mapa para escolher a partida ou o destino. Podes arrastar os pontos.',
   mapFrom: 'Partir daqui', mapTo: 'Ir para aqui', mapPoint: 'Ponto no mapa',
@@ -52,6 +57,11 @@ Object.assign(TEXT.en, {
   liveAt: x => `live: ${x}`, delayed: m => `${m} min late`, early: m => `${m} min early`, onTime: 'on time',
   cancelledLeg: 'Cancelled', destination: 'destination', yourStart: 'starting point',
   alsoWalk: (m, d) => `You could also walk: ${m} min (${d}).`,
+  avoidLabel: 'Avoid today',
+  avoidHint: 'For strike days: routes using these move to the end and are flagged. Back to normal tomorrow.',
+  usesAvoided: x => `Uses ${x}, which you're avoiding today`,
+  allAvoided: 'Every route found uses transport you’re avoiding today.',
+  tripAvoided: x => `You’re avoiding ${x} today. Check it’s running before you leave.`,
   showOnMap: 'Show on map', mapBtn: 'Map', mapLabel: 'Route map',
   mapHint: 'Tap the map to choose the start or destination. You can drag the pins.',
   mapFrom: 'Leave from here', mapTo: 'Go here', mapPoint: 'Point on the map',
@@ -60,6 +70,78 @@ Object.assign(TEXT.en, {
   modeWALK: 'Walk', modeBUS: 'Bus', modeTRAM: 'Tram', modeSUBWAY: 'Metro', modeFERRY: 'Boat',
   modeRAIL: 'Train', modeFUNICULAR: 'Funicular', modeAERIAL_LIFT: 'Cable car', modeCOACH: 'Coach',
 });
+
+/* ---------- Avoid today (strike days) ---------- */
+// Operators recognised on a route leg from its stop id and agency name. Order matters (MTS before Metro, CM before Carris).
+const AVOID_OPS = [
+  { key: 'metro', label: 'Metro', re: /metro.?lisboa|metropolitano de lisboa/i, modes: ['SUBWAY'] },
+  { key: 'mts', label: 'MTS', re: /transportes.?do.?sul|metro sul|\bmts\b/i, modes: ['TRAM'] },
+  { key: 'boat', label: 'Barcos', labelEn: 'Boats', re: /transtejo|soflusa|ttsl/i, modes: ['FERRY'] },
+  { key: 'cp', label: 'CP', re: /comboios|^cp[_-]|\bcp\b/i, modes: null },
+  { key: 'fertagus', label: 'Fertagus', re: /fer[tg]agus/i, modes: null },
+  { key: 'cm', label: 'Carris Metropolitana', re: /carris.?metropolitana/i, modes: null },
+  { key: 'carris', label: 'Carris', re: /carris/i, modes: null },
+  { key: 'tcb', label: 'TCB Barreiro', re: /barreiro|\btcb\b/i, modes: null },
+];
+const RAIL_ALL = ['RAIL', 'SUBURBAN', 'REGIONAL_RAIL', 'REGIONAL_FAST_RAIL', 'HIGHSPEED_RAIL', 'LONG_DISTANCE', 'NIGHT_RAIL'];
+const ALL_TRANSIT = ['BUS', 'COACH', 'TRAM', 'SUBWAY', 'FERRY', ...RAIL_ALL, 'FUNICULAR', 'AERIAL_LIFT', 'CABLE_CAR', 'OTHER'];
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+function avoidedOps() {
+  const a = store.get('px_avoid', null);
+  return a && a.date === todayStr() ? a.ops : []; // resets automatically the next day
+}
+function setAvoided(ops) { store.set('px_avoid', { date: todayStr(), ops }); }
+const opLabel = o => (state.lang === 'en' && o.labelEn) || o.label;
+
+// Which operator runs a transit leg (or a saved trip's stop).
+function opOfText(text) {
+  for (const o of AVOID_OPS) {
+    if (o.key === 'carris' && /carris.?metropolitana/i.test(text)) continue;
+    if (o.re.test(text)) return o;
+  }
+  return null;
+}
+const legOp = leg => opOfText(`${leg.from?.stopId || ''} ${leg.agencyName || ''}`);
+function avoidedIn(it) {
+  const av = avoidedOps();
+  if (!av.length) return [];
+  const hit = new Set();
+  it.legs.filter(isTransit).forEach(l => { const o = legOp(l); if (o && av.includes(o.key)) hit.add(o); });
+  return [...hit];
+}
+
+// Modes the planner can leave out entirely (only when every operator of that mode is avoided).
+function allowedModes() {
+  const av = avoidedOps();
+  if (!av.length) return null;
+  let modes = [...ALL_TRANSIT];
+  const drop = list => { modes = modes.filter(m => !list.includes(m)); };
+  if (av.includes('metro')) drop(['SUBWAY']);
+  if (av.includes('mts')) drop(['TRAM']);
+  if (av.includes('boat')) drop(['FERRY']);
+  if (av.includes('cp') && av.includes('fertagus')) drop(RAIL_ALL);
+  return modes.length === ALL_TRANSIT.length ? null : modes;
+}
+
+function renderAvoid() {
+  const av = avoidedOps();
+  const box = $('#avoidChips');
+  box.replaceChildren(...AVOID_OPS.map(o => {
+    const b = el('button', 'chip avoid-chip', opLabel(o)); b.type = 'button';
+    b.setAttribute('aria-pressed', String(av.includes(o.key)));
+    b.addEventListener('click', () => {
+      const now = avoidedOps();
+      setAvoided(now.includes(o.key) ? now.filter(k => k !== o.key) : [...now, o.key]);
+      renderAvoid();
+      render(); // saved trips show the warning too
+      if (plan.from && plan.to && plan.results) runPlan();
+    });
+    return b;
+  }));
+  const names = AVOID_OPS.filter(o => av.includes(o.key)).map(opLabel);
+  $('#avoidSummary').textContent = names.length ? `: ${names.join(', ')}` : '';
+  $('#avoidBox').classList.toggle('active', names.length > 0);
+}
 
 /* ---------- State ---------- */
 const savedPlan = store.get('px_plan', {});
@@ -234,11 +316,15 @@ async function runPlan() {
     u.searchParams.set('time', new Date($('#whenTime').value).toISOString());
     u.searchParams.set('arriveBy', String(mode === 'arrive'));
   }
+  const modes = allowedModes();
+  if (modes) u.searchParams.set('transitModes', modes.join(','));
   const id = ++plan.req;
   status.textContent = t('planning');
   $('#planBtn').disabled = true;
   try {
-    const r = await fetch(u);
+    let r = await fetch(u);
+    // If the planner doesn't accept the mode list, ask again without it (routes are still flagged below).
+    if (!r.ok && modes && r.status >= 400 && r.status < 500) { u.searchParams.delete('transitModes'); r = await fetch(u); }
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     if (id !== plan.req) return;
@@ -262,12 +348,17 @@ function orderItins() {
   let list = plan.results.map(it => ({ it, leave: leaveTs(it), end: isoS(it.endTime) }));
   if (plan.mode !== 'arrive') list = list.filter(x => x.leave >= now - 60);
   if (!list.length) return [];
+  list.forEach(x => { x.avoided = avoidedIn(x.it); });
+  // Routes using an operator you're avoiding today go last, flagged, and are never "best".
+  const ok = list.filter(x => !x.avoided.length);
+  const flagged = list.filter(x => x.avoided.length).sort((a, b) => a.leave - b.leave);
+  if (!ok.length) return flagged;
   // Best: earliest arrival, then fewer changes, then leaving later (arrive-by: leave latest).
-  const best = [...list].sort((a, b) => plan.mode === 'arrive'
+  const best = [...ok].sort((a, b) => plan.mode === 'arrive'
     ? (b.leave - a.leave) || (a.it.transfers - b.it.transfers)
     : (a.end - b.end) || (a.it.transfers - b.it.transfers) || (b.leave - a.leave))[0];
-  const rest = list.filter(x => x !== best).sort((a, b) => a.leave - b.leave);
-  return [{ ...best, best: true }, ...rest];
+  const rest = ok.filter(x => x !== best).sort((a, b) => a.leave - b.leave);
+  return [{ ...best, best: true }, ...rest, ...flagged];
 }
 
 function leaveLabel(ts) {
@@ -300,6 +391,8 @@ function _renderPlan() {
   if (!ordered.length) { ul.replaceChildren(); status.textContent = t('allMissed'); return; }
   if (status.textContent === t('allMissed') || status.textContent === t('noItins')) status.textContent = '';
   plan.shown = ordered;
+  if (ordered.every(x => x.avoided?.length)) status.textContent = t('allAvoided');
+  else if (status.textContent === t('allAvoided')) status.textContent = '';
 
   ul.replaceChildren(...ordered.map(x => renderItin(x)));
   if (plan.direct && plan.direct.duration <= 40 * 60) {
@@ -308,9 +401,9 @@ function _renderPlan() {
   }
 }
 
-function renderItin({ it, leave, best }) {
+function renderItin({ it, leave, best, avoided = [] }) {
   const key = itinKey(it);
-  const li = el('li', 'itin' + (best ? ' best' : ''));
+  const li = el('li', 'itin' + (best ? ' best' : '') + (avoided.length ? ' avoided' : ''));
   const sum = el('button', 'itin-sum'); sum.type = 'button';
   const open = plan.open.has(key);
   sum.setAttribute('aria-expanded', open);
@@ -325,6 +418,7 @@ function renderItin({ it, leave, best }) {
 
   const r2 = el('div', 'itin-row2');
   if (best) r2.append(el('span', 'pill-best', t('best')));
+  if (avoided.length) r2.append(el('span', 'pill-avoid', t('usesAvoided', avoided.map(opLabel).join(', '))));
   r2.append(el('span', null, `${clock(isoS(it.startTime))} – ${clock(isoS(it.endTime))}`), el('span', null, t('transfers', it.transfers || 0)));
 
   const legsEl = el('div', 'itin-legs');
@@ -456,4 +550,5 @@ window.addEventListener('px:refresh', () => {
 // Restore the last start and destination.
 if (plan.from) $('#planFrom').value = placeText(plan.from);
 if (plan.to) $('#planTo').value = placeText(plan.to);
-window.addEventListener('DOMContentLoaded', renderPlanPlaces);
+window.addEventListener('DOMContentLoaded', () => { renderPlanPlaces(); renderAvoid(); });
+$('#langBtn').addEventListener('click', () => setTimeout(renderAvoid, 0));

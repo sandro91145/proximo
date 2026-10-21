@@ -13,6 +13,11 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
   Transtejo/Soflusa, MTS, Barreiro buses). Routes use timetables; Carris Metropolitana buses in a route
   are checked against their live data (late/early), and CP trains have live data from the planner itself.
 - Any route can be saved as a trip.
+- *Evitar hoje* (avoid today), for strike days: tick operators (Metro, MTS, boats, CP, Fertagus,
+  Carris, Carris Metropolitana, TCB). Routes using them move to the end with a warning and are never
+  marked best; the planner also leaves out Metro / MTS / boat / train modes where it can, so it looks
+  for other options. Saved trips on those operators show a warning. It resets the next day.
+  The app can't detect strikes by itself: the routes come from timetables.
 - Interactive map (button *Mapa*): start and destination pins you can drag, tap anywhere to
   choose *Partir daqui* / *Ir para aqui*, and the selected route drawn per leg (coloured lines for
   transit, dashed for walking, dots where you get on and off). *Ver no mapa* on any option shows it.

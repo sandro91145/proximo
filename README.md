@@ -76,8 +76,8 @@ per second, as their usage policy asks). Walking routes: OpenStreetMap routing (
 If the route can't be calculated, the app estimates from the straight-line distance instead.
 Both are only used while choosing places, not while the app refreshes departures.
 
-Map: [Leaflet](https://leafletjs.com) (loaded only when the map is opened) with
-[CARTO](https://carto.com/attributions) map tiles based on OpenStreetMap; credits are shown on the map.
+Map: [Leaflet](https://leafletjs.com) (loaded only when the map is opened) with OpenStreetMap's standard
+tiles, which need no key; the credit is shown on the map, as the OSM tile policy asks.
 
 ## Licence
 

@@ -1,5 +1,5 @@
 /* Próximo — interactive map for the journey planner.
- * Leaflet (loaded only when the map is first opened) with CARTO map tiles based on OpenStreetMap.
+ * Leaflet (loaded only when the map is first opened) with OpenStreetMap's standard tiles (no key needed).
  * Shows start and destination pins (draggable), lets you tap the map to pick either,
  * and draws the selected route: coloured lines for transit, dashed for walking.
  */
@@ -8,9 +8,9 @@
 const MAP = {
   LEAFLET_JS: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
   LEAFLET_CSS: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
-  TILES_LIGHT: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  TILES_DARK: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+  // OpenStreetMap standard tiles: free, no key. Their tile policy asks for the credit below and light use.
+  TILES: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  ATTRIBUTION: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
   CENTER: [38.715, -9.14], ZOOM: 12,
 };
 
@@ -45,13 +45,12 @@ async function ensureMap() {
   const m = L.map('planMap', { zoomControl: true, attributionControl: true })
     .setView(MAP.CENTER, MAP.ZOOM);
   m.attributionControl.setPrefix(false);
-  mapState.tiles = L.tileLayer(isDark() ? MAP.TILES_DARK : MAP.TILES_LIGHT, {
-    attribution: MAP.ATTRIBUTION, subdomains: 'abcd', maxZoom: 19, detectRetina: true,
+  mapState.tiles = L.tileLayer(MAP.TILES, {
+    attribution: MAP.ATTRIBUTION, maxZoom: 19, className: 'osm-tiles',
   }).addTo(m);
   mapState.routeLayer = L.layerGroup().addTo(m);
   m.on('click', onMapClick);
   mapState.map = m;
-  darkQuery?.addEventListener?.('change', () => mapState.tiles.setUrl(isDark() ? MAP.TILES_DARK : MAP.TILES_LIGHT));
   return m;
 }
 

@@ -22,6 +22,16 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
   top of the planner, avoids an operator automatically while a full strike is on (tap it under
   *Evitar hoje* to use it anyway), warns on partial strikes, and marks affected routes and saved trips.
 
+### Automatic updates (GitHub Action)
+
+`.github/workflows/strikes.yml` runs every morning (05:50 UTC) and on demand (*Actions → Update strike list →
+Run workflow*). It runs Claude Code with your Claude Pro subscription to check the news and rewrite
+`disruptions.json`, then validates the file and commits it. One-time setup:
+
+1. On your PC, install Claude Code and run `claude setup-token`; sign in with your Claude account and copy the token.
+2. In this repo: *Settings → Secrets and variables → Actions → New repository secret*, name it
+   `CLAUDE_CODE_OAUTH_TOKEN` and paste the token.
+
 ### disruptions.json format
 
 ```json

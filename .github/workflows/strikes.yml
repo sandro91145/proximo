@@ -1,0 +1,106 @@
+# Updates disruptions.json (the app's strike list) every morning from the news.
+# Runs Claude Code on GitHub with your Claude Pro subscription.
+# Setup: create a token on your PC with `claude setup-token`, then add it as the
+# repository secret CLAUDE_CODE_OAUTH_TOKEN (Settings → Secrets and variables → Actions).
+
+name: Update strike list
+
+on:
+  schedule:
+    # GitHub uses UTC: 05:50 UTC = 05:50 in Lisbon in winter, 06:50 in summer.
+    # Scheduled runs can start a few minutes late when GitHub is busy.
+    - cron: '50 5 * * *'
+  workflow_dispatch: {}   # "Run workflow" button for a manual check
+
+permissions:
+  contents: write
+
+concurrency:
+  group: strike-list
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the news and rewrite disruptions.json
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Bash(python3:*),Bash(date:*),Bash(TZ=Europe/Lisbon date:*)"
+          prompt: |
+            You keep the strike list of a Lisbon public transport app up to date. Your only output is the file
+            disruptions.json in the current directory. Do not commit, push, open pull requests or touch any other file.
+
+            ## 1. Research (today and the next 7 days)
+            Use WebSearch (in Portuguese) and read the most relevant articles with WebFetch. Cover: Metro de Lisboa,
+            Carris (Lisbon city buses/trams), Carris Metropolitana, CP (Sintra, Cascais, Azambuja, Sado lines), Fertagus,
+            Transtejo/Soflusa ferries, Metro Transportes do Sul (MTS) and TCB Barreiro buses. Example searches:
+            "greve Metro Lisboa", "greve Carris", "greve Carris Metropolitana", "greve CP comboios", "greve Fertagus",
+            "greve Transtejo Soflusa", "greve Metro Sul do Tejo MTS", "greve TCB Barreiro",
+            "serviços mínimos greve transportes Lisboa", "barcos Cacilhas supressões", "Almada transportes greve".
+            Keep only strikes or major disruptions happening today or within the next 7 days that are confirmed by a news
+            article or an operator announcement (no rumours). For each: operator, dates, exact time window, whether
+            normal service stops fully or only partly, minimum services (serviços mínimos) if set or still pending, and a source URL.
+
+            ## 2. Rewrite disruptions.json
+            Read the current file first. Keep its "note" text unchanged. Write this exact shape (UTF-8, 2-space indent):
+            {
+              "updated": "<now, ISO 8601 with the Europe/Lisbon offset>",
+              "note": "<unchanged>",
+              "items": [
+                {
+                  "operator": "<metro | mts | boat | cp | fertagus | cm | carris | tcb>",
+                  "kind": "strike" or "disruption",
+                  "scope": "full" or "partial",
+                  "title": "<short title in Portuguese>",
+                  "start": "<ISO 8601 with offset>",
+                  "end": "<ISO 8601 with offset>",
+                  "minimum": "<minimum services in Portuguese, or empty string>",
+                  "source": "<news or operator URL>"
+                }
+              ]
+            }
+            Operator keys: metro = Metro de Lisboa, mts = Metro Transportes do Sul, boat = Transtejo/Soflusa, cp = CP,
+            fertagus = Fertagus, cm = Carris Metropolitana, carris = Carris (Lisbon city), tcb = TCB Barreiro.
+            "full" only when normal service stops for the whole window (the app then avoids that operator automatically
+            during it); "partial" when only some services, lines or unclear hours are affected (the app only warns).
+            One item per continuous window (strikes on two separate days = two items). Times are Europe/Lisbon local
+            time with the correct UTC offset for that date (+01:00 in summer time, +00:00 in winter time; summer time ends
+            on the last Sunday of October). Use `TZ=Europe/Lisbon date` to get the current local time. Remove items whose
+            end is in the past. Items already in the file that are still upcoming stay unless the news says they were
+            cancelled. If nothing is found, write an empty items array.
+
+            ## 3. Check
+            Validate with: python3 -c "import json; d=json.load(open('disruptions.json')); assert isinstance(d['items'], list)"
+            and fix the file if that fails. Then reply with a short summary of the items.
+
+      - name: Validate and save
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          from datetime import datetime
+          ops = {"metro", "mts", "boat", "cp", "fertagus", "cm", "carris", "tcb"}
+          d = json.load(open("disruptions.json"))
+          assert isinstance(d.get("items"), list), "items must be a list"
+          for x in d["items"]:
+              assert x.get("operator") in ops, f"bad operator: {x.get('operator')}"
+              assert x.get("scope", "full") in ("full", "partial"), f"bad scope: {x.get('scope')}"
+              s, e = datetime.fromisoformat(x["start"]), datetime.fromisoformat(x["end"])
+              assert s.tzinfo and e.tzinfo and s < e, f"bad window: {x['start']} – {x['end']}"
+          print(f"OK: {len(d['items'])} item(s)")
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add disruptions.json
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Update disruptions $(date -u +%F)"
+            git push
+          fi

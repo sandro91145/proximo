@@ -116,7 +116,8 @@ async function loadDisruptions() {
     disrupt.updated = j.updated ? Date.parse(j.updated) / 1000 : null;
   } catch { /* keep what we had; the app works without it */ }
   disrupt.fetched = Date.now();
-  renderAvoid(); renderStrikes(); render();
+  // Draw each part on its own, so one failing can't hide the strike notice.
+  for (const fn of [renderStrikes, renderAvoid, render]) { try { fn(); } catch (e) { console.error(e); } }
 }
 // Strike affecting an operator at a moment (full = no normal service; partial = some service affected).
 const strikeAt = (key, ts, scope) => disrupt.items.find(x => x.operator === key && x.s <= ts && ts < x.e && (!scope || (x.scope || 'full') === scope));
@@ -199,8 +200,9 @@ function renderAvoid() {
     return b;
   }));
   const names = AVOID_OPS.filter(o => avoidedOps(now).includes(o.key)).map(opLabel);
-  $('#avoidSummary').textContent = names.length ? `: ${names.join(', ')}` : '';
-  $('#avoidToggle').classList.toggle('active', names.length > 0);
+  const sum = $('#avoidSummary'), tog = $('#avoidToggle');
+  if (sum) sum.textContent = names.length ? `: ${names.join(', ')}` : '';
+  if (tog) tog.classList.toggle('active', names.length > 0);
 }
 
 /* The strike notice at the top of the planner: today and the next 7 days. */

@@ -97,7 +97,8 @@ The app tries the direct call first and only uses the proxy if that fails.
 
 ## Updating the app
 
-After changing files, bump `VERSION` in `sw.js` (e.g. `proximo-v2`) so installed copies pick up the change.
+After changing files, bump `VERSION` in `sw.js` and the `?v=` number on the scripts and stylesheet in `index.html`
+(and in `sw.js`'s list), so installed copies always load matching files.
 
 ## Data and services used
 

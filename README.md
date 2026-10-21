@@ -12,7 +12,10 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
 - Covers every operator in the Lisbon area (Carris Metropolitana, Carris, Metro, CP, Fertagus,
   Transtejo/Soflusa, MTS, Barreiro buses). Routes use timetables; Carris Metropolitana buses in a route
   are checked against their live data (late/early), and CP trains have live data from the planner itself.
-- A route that starts with a Carris Metropolitana bus can be saved as a trip.
+- Any route can be saved as a trip.
+- Interactive map (button *Mapa*): start and destination pins you can drag, tap anywhere to
+  choose *Partir daqui* / *Ir para aqui*, and the selected route drawn per leg (coloured lines for
+  transit, dashed for walking, dots where you get on and off). *Ver no mapa* on any option shows it.
 
 **As tuas viagens (saved trips)**
 - Works for stops and stations of every operator: Carris Metropolitana, Carris, Metro, CP, Fertagus,
@@ -72,6 +75,9 @@ Street search: OpenStreetMap Nominatim (searches only when you press Search, max
 per second, as their usage policy asks). Walking routes: OpenStreetMap routing (FOSSGIS, foot profile).
 If the route can't be calculated, the app estimates from the straight-line distance instead.
 Both are only used while choosing places, not while the app refreshes departures.
+
+Map: [Leaflet](https://leafletjs.com) (loaded only when the map is opened) with
+[CARTO](https://carto.com/attributions) map tiles based on OpenStreetMap; credits are shown on the map.
 
 ## Licence
 

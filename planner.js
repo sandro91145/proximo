@@ -26,6 +26,9 @@ Object.assign(TEXT.pt, {
   liveAt: x => `ao vivo: ${x}`, delayed: m => `${m} min atrasado`, early: m => `${m} min adiantado`, onTime: 'a horas',
   cancelledLeg: 'Cancelado', destination: 'destino', yourStart: 'ponto de partida',
   alsoWalk: (m, d) => `Também podes ir a pé: ${m} min (${d}).`,
+  showOnMap: 'Ver no mapa', mapBtn: 'Mapa', mapLabel: 'Mapa do percurso',
+  mapHint: 'Toca no mapa para escolher a partida ou o destino. Podes arrastar os pontos.',
+  mapFrom: 'Partir daqui', mapTo: 'Ir para aqui', mapPoint: 'Ponto no mapa',
   saveAsTrip: 'Guardar como viagem', savedTrip: 'Guardada nas tuas viagens, com a contagem de quando sair.',
   usedHere: 'Localização atual',
   modeWALK: 'A pé', modeBUS: 'Autocarro', modeTRAM: 'Elétrico', modeSUBWAY: 'Metro', modeFERRY: 'Barco',
@@ -49,6 +52,9 @@ Object.assign(TEXT.en, {
   liveAt: x => `live: ${x}`, delayed: m => `${m} min late`, early: m => `${m} min early`, onTime: 'on time',
   cancelledLeg: 'Cancelled', destination: 'destination', yourStart: 'starting point',
   alsoWalk: (m, d) => `You could also walk: ${m} min (${d}).`,
+  showOnMap: 'Show on map', mapBtn: 'Map', mapLabel: 'Route map',
+  mapHint: 'Tap the map to choose the start or destination. You can drag the pins.',
+  mapFrom: 'Leave from here', mapTo: 'Go here', mapPoint: 'Point on the map',
   saveAsTrip: 'Save as trip', savedTrip: 'Saved to your trips, with a countdown to when you leave.',
   usedHere: 'Current location',
   modeWALK: 'Walk', modeBUS: 'Bus', modeTRAM: 'Tram', modeSUBWAY: 'Metro', modeFERRY: 'Boat',
@@ -155,6 +161,7 @@ function setPlace(which, p, run = true) {
   rememberPlace(plan[which]);
   renderPlanPlaces();
   savePlan();
+  window.dispatchEvent(new Event('px:plan'));
   if (run && plan.from && plan.to) runPlan();
 }
 
@@ -188,7 +195,7 @@ function planHere() {
   navigator.geolocation.getCurrentPosition(async pos => {
     const { latitude: lat, longitude: lon } = pos.coords;
     let p = { label: t('usedHere'), sub: '', lat, lon };
-    try { const r = await nominatim('/reverse', { lat, lon, zoom: 18 }); if (r && !r.error) p = { ...toPlace(r), lat, lon }; } catch {}
+    try { const r = await nominatim('/reverse', { lat, lon, zoom: 18 }); const q = r && !r.error ? toPlace(r) : null; if (q?.label) p = { ...q, lat, lon }; } catch {}
     status.textContent = '';
     setPlace('from', p);
   }, () => { status.textContent = t('locError'); }, { enableHighAccuracy: true, timeout: 10000 });
@@ -237,7 +244,7 @@ async function runPlan() {
     if (id !== plan.req) return;
     plan.results = (j.itineraries || []).filter(it => Array.isArray(it.legs) && it.legs.length);
     plan.direct = (j.direct || []).find(d => d.legs?.length === 1 && d.legs[0].mode === 'WALK') || null;
-    plan.at = Date.now(); plan.mode = mode; plan.open = new Set();
+    plan.at = Date.now(); plan.mode = mode; plan.open = new Set(); plan.selected = null;
     status.textContent = '';
     renderPlan();
     await enrichLive();
@@ -280,13 +287,19 @@ function lineBadge(leg) {
 }
 
 function renderPlan() {
+  _renderPlan();
+  window.dispatchEvent(new Event('px:plan'));
+}
+function _renderPlan() {
   const ul = $('#itins');
   const status = $('#planStatus');
+  plan.shown = [];
   if (!plan.results) { ul.replaceChildren(); return; }
   if (!plan.results.length) { ul.replaceChildren(); status.textContent = t('noItins'); return; }
   const ordered = orderItins();
   if (!ordered.length) { ul.replaceChildren(); status.textContent = t('allMissed'); return; }
   if (status.textContent === t('allMissed') || status.textContent === t('noItins')) status.textContent = '';
+  plan.shown = ordered;
 
   ul.replaceChildren(...ordered.map(x => renderItin(x)));
   if (plan.direct && plan.direct.duration <= 40 * 60) {
@@ -324,7 +337,7 @@ function renderItin({ it, leave, best }) {
 
   sum.append(r1, r2, legsEl);
   sum.addEventListener('click', () => {
-    if (plan.open.has(key)) plan.open.delete(key); else plan.open.add(key);
+    if (plan.open.has(key)) plan.open.delete(key); else { plan.open.add(key); plan.selected = key; }
     renderPlan();
   });
   li.append(sum);
@@ -362,6 +375,14 @@ function renderSteps(it) {
     ol.append(li);
   });
   box.append(ol);
+
+  const mapBtn = el('button', 'ghost show-on-map', t('showOnMap')); mapBtn.type = 'button';
+  mapBtn.addEventListener('click', () => {
+    plan.selected = itinKey(it);
+    window.dispatchEvent(new CustomEvent('px:showmap'));
+    renderPlan();
+  });
+  box.append(mapBtn);
 
   // Save as a trip: the first stop where you board, with its line, becomes a saved trip with a countdown.
   const k = it.legs.findIndex(isTransit);
@@ -411,6 +432,7 @@ $('#swapBtn').addEventListener('click', () => {
   [plan.from, plan.to] = [plan.to, plan.from];
   const a = $('#planFrom').value; $('#planFrom').value = $('#planTo').value; $('#planTo').value = a;
   savePlan(); renderPlanPlaces();
+  window.dispatchEvent(new Event('px:plan'));
   if (plan.from && plan.to) runPlan();
 });
 $('#whenMode').addEventListener('change', ev => {

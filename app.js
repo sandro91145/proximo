@@ -568,7 +568,7 @@ function useHere() {
   navigator.geolocation.getCurrentPosition(async pos => {
     const { latitude: lat, longitude: lon } = pos.coords;
     let place = { label: t('currentLoc'), sub: '', lat, lon };
-    try { const r = await nominatim('/reverse', { lat, lon, zoom: 18 }); if (r && !r.error) place = { ...toPlace(r), lat, lon }; } catch {}
+    try { const r = await nominatim('/reverse', { lat, lon, zoom: 18 }); const q = r && !r.error ? toPlace(r) : null; if (q?.label) place = { ...q, lat, lon }; } catch {}
     status.textContent = '';
     chooseFrom(place);
   }, () => { status.textContent = t('locError'); }, { enableHighAccuracy: true, timeout: 10000 });

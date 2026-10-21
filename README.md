@@ -15,6 +15,10 @@ An installable web app (PWA): one codebase for Android and PC, no build step.
 - A route that starts with a Carris Metropolitana bus can be saved as a trip.
 
 **As tuas viagens (saved trips)**
+- Works for stops and stations of every operator: Carris Metropolitana, Carris, Metro, CP, Fertagus,
+  Transtejo/Soflusa, MTS and the Barreiro buses. Nearby stops are listed with their operator.
+- Carris Metropolitana stops use Carris' live data; other stops use timetables from Transitous,
+  live where the operator shares it (CP trains for now). They refresh once a minute.
 
 - Save trips in three steps: where you leave from (a street, or your current location),
   the stop (the closest ones to that street are listed first), and the lines you care about.

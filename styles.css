@@ -377,3 +377,8 @@ button, input { font: inherit; color: inherit; }
   .mytrips { padding-top: 4px; }
   .foot { grid-column: 1 / -1; }
 }
+
+.res-icon { width: 17px; height: 17px; vertical-align: -3px; margin-right: 6px; color: var(--muted); }
+#lineChips .hint { padding: 4px 0; }
+.badge { max-width: 8.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leg-badge { max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

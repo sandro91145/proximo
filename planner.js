@@ -26,7 +26,7 @@ Object.assign(TEXT.pt, {
   liveAt: x => `ao vivo: ${x}`, delayed: m => `${m} min atrasado`, early: m => `${m} min adiantado`, onTime: 'a horas',
   cancelledLeg: 'Cancelado', destination: 'destino', yourStart: 'ponto de partida',
   alsoWalk: (m, d) => `Também podes ir a pé: ${m} min (${d}).`,
-  saveAsTrip: 'Guardar como viagem', savedTrip: 'Guardada nas tuas viagens, com contagem ao vivo.',
+  saveAsTrip: 'Guardar como viagem', savedTrip: 'Guardada nas tuas viagens, com a contagem de quando sair.',
   usedHere: 'Localização atual',
   modeWALK: 'A pé', modeBUS: 'Autocarro', modeTRAM: 'Elétrico', modeSUBWAY: 'Metro', modeFERRY: 'Barco',
   modeRAIL: 'Comboio', modeFUNICULAR: 'Funicular', modeAERIAL_LIFT: 'Teleférico', modeCOACH: 'Expresso',
@@ -49,7 +49,7 @@ Object.assign(TEXT.en, {
   liveAt: x => `live: ${x}`, delayed: m => `${m} min late`, early: m => `${m} min early`, onTime: 'on time',
   cancelledLeg: 'Cancelled', destination: 'destination', yourStart: 'starting point',
   alsoWalk: (m, d) => `You could also walk: ${m} min (${d}).`,
-  saveAsTrip: 'Save as trip', savedTrip: 'Saved to your trips, with a live countdown.',
+  saveAsTrip: 'Save as trip', savedTrip: 'Saved to your trips, with a countdown to when you leave.',
   usedHere: 'Current location',
   modeWALK: 'Walk', modeBUS: 'Bus', modeTRAM: 'Tram', modeSUBWAY: 'Metro', modeFERRY: 'Boat',
   modeRAIL: 'Train', modeFUNICULAR: 'Funicular', modeAERIAL_LIFT: 'Cable car', modeCOACH: 'Coach',
@@ -363,17 +363,22 @@ function renderSteps(it) {
   });
   box.append(ol);
 
-  // Save as a trip when the first transit leg is a Carris Metropolitana bus (live countdown works there).
+  // Save as a trip: the first stop where you board, with its line, becomes a saved trip with a countdown.
   const k = it.legs.findIndex(isTransit);
   const first = k >= 0 ? it.legs[k] : null;
-  if (first && cmStop(first) && plan.from) {
+  if (first && first.from?.stopId && plan.from) {
     const b = el('button', 'ghost save-trip', t('saveAsTrip')); b.type = 'button';
     b.addEventListener('click', () => {
       const walkSec = it.legs.slice(0, k).reduce((s, l) => s + (l.duration || 0), 0);
+      const cm = cmStop(first);
+      const line = String(lineName(first));
       state.trips.push({
         id: 't' + Date.now().toString(36),
-        from: plan.from, stopId: cmStop(first), stopName: first.from?.name || cmStop(first),
-        lines: [String(first.routeShortName || '')].filter(Boolean),
+        source: cm ? 'cm' : 'tr',
+        from: plan.from, stopId: cm || first.from.stopId, trId: first.from.stopId,
+        stopName: first.from?.name || '',
+        lines: line ? [line] : [],
+        lineMeta: line ? { [line]: { c: normColor(first.routeColor), t: normColor(first.routeTextColor) } } : {},
         name: `${plan.from.label} → ${plan.to?.label || ''}`.trim(),
         walk: Math.ceil(walkSec / 60),
       });

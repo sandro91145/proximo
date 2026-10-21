@@ -20,7 +20,34 @@ const CONFIG = {
   WALK_ROUTER: 'https://routing.openstreetmap.de/routed-foot/route/v1/foot',
   // Fallback estimate when routing fails: straight line x detour factor at 80 m/min.
   WALK_M_PER_MIN: 80, DETOUR: 1.3,
+  // Departures for stops of every other operator (Metro, boats, CP, Fertagus, MTS, Carris…).
+  TRANSITOUS: 'https://api.transitous.org',
+  TR_REFRESH_MS: 60_000,        // timetable-based, so once a minute is plenty
+  NEAR_RADIUS_M: 800,
 };
+
+/* Operators, recognised from the stop id prefix the journey planner uses (feed name). */
+const OPERATORS = [
+  [/^carris.?metropolitana/i, 'Carris Metropolitana', 'BUS'],
+  [/^metro.?lisboa/i, 'Metro de Lisboa', 'SUBWAY'],
+  [/^metro.?transportes.?do.?sul/i, 'MTS', 'TRAM'],
+  [/^transtejo|^soflusa|^ttsl/i, 'Transtejo/Soflusa', 'FERRY'],
+  [/^comboios|^cp[_-]/i, 'CP', 'RAIL'],
+  [/^fer[tg]agus/i, 'Fertagus', 'RAIL'],
+  [/^carris/i, 'Carris', 'BUS'],
+  [/^barreiro|^tcb/i, 'TCB Barreiro', 'BUS'],
+  [/^cascais/i, 'MobiCascais', 'BUS'],
+];
+function operatorOf(stopId) {
+  for (const [re, name, mode] of OPERATORS) if (re.test(stopId || '')) return { name, mode };
+  return { name: '', mode: 'BUS' };
+}
+// A Carris Metropolitana stop gets its live data from Carris' own API (6-digit stop number).
+function cmIdFrom(stopId) {
+  if (!/^carris.?metropolitana/i.test(stopId || '')) return null;
+  const m = String(stopId).match(/(\d{6})$/);
+  return m ? m[1] : null;
+}
 
 /* ---------- Text (PT / EN) ---------- */
 const TEXT = {
@@ -28,7 +55,7 @@ const TEXT = {
     addTrip: 'Nova viagem', editTrip: 'Editar viagem', addFirst: 'Adicionar viagem', myTrips: 'As tuas viagens',
     emptyTitle: 'Quando sai o teu autocarro?',
     emptyText: 'Guarda os percursos que fazes sempre para veres as próximas partidas em tempo real e quando tens de sair.',
-    stopLabel: 'Paragem', stopPh: 'Nome da paragem ou número', nearMe: 'Paragens perto de mim',
+    stopLabel: 'Paragem ou estação', stopPh: 'Nome da paragem ou estação', nearMe: 'Paragens perto de mim',
     change: 'Mudar', linesLabel: 'Linhas a mostrar', linesHint: 'Sem nenhuma escolhida, mostra todas.',
     nameLabel: 'Nome da viagem', namePh: 'Casa → trabalho', walkLabel: 'Minutos a pé até à paragem',
     save: 'Guardar', delete: 'Apagar', confirmDelete: 'Apagar esta viagem?',
@@ -53,12 +80,14 @@ const TEXT = {
     walkCalcing: 'A calcular o percurso a pé…',
     walkCalc: (m, d) => `Calculado pelo percurso a pé: ${m} min (${d}). Podes ajustar.`,
     walkEst: (m, d) => `Estimativa: cerca de ${m} min (${d} em linha reta). Podes ajustar.`,
+    loadingLines: 'A carregar as linhas desta paragem…', noLinesFound: 'Não encontrei partidas nas próximas horas nesta paragem.',
+    nearLoading: 'A procurar paragens perto deste ponto…', nearError: 'Não foi possível procurar paragens. Pesquisa pelo nome.',
   },
   en: {
     addTrip: 'New trip', editTrip: 'Edit trip', addFirst: 'Add a trip', myTrips: 'Your trips',
     emptyTitle: 'When does your bus leave?',
     emptyText: 'Save the journeys you make often to see the next departures live and when you need to leave.',
-    stopLabel: 'Stop', stopPh: 'Stop name or number', nearMe: 'Stops near me',
+    stopLabel: 'Stop or station', stopPh: 'Stop or station name', nearMe: 'Stops near me',
     change: 'Change', linesLabel: 'Lines to show', linesHint: 'With none selected, all lines are shown.',
     nameLabel: 'Trip name', namePh: 'Home → work', walkLabel: 'Walking minutes to the stop',
     save: 'Save', delete: 'Delete', confirmDelete: 'Delete this trip?',
@@ -83,6 +112,8 @@ const TEXT = {
     walkCalcing: 'Working out the walking route…',
     walkCalc: (m, d) => `Based on the walking route: ${m} min (${d}). You can adjust it.`,
     walkEst: (m, d) => `Estimate: about ${m} min (${d} in a straight line). You can adjust it.`,
+    loadingLines: 'Loading the lines at this stop…', noLinesFound: 'No departures found at this stop in the next few hours.',
+    nearLoading: 'Looking for stops near this point…', nearError: 'Couldn’t look for stops. Search by name instead.',
   },
 };
 
@@ -193,6 +224,39 @@ async function loadArrivals(stopId) {
   }
 }
 
+/* Departures from the journey planner's timetable data (live where the operator shares it). */
+const trKey = id => 'tr:' + id;
+async function loadTrArrivals(stopId, n = 30) {
+  const key = trKey(stopId);
+  const prev = state.arrivals[key];
+  try {
+    const u = new URL(CONFIG.TRANSITOUS + '/api/v5/stoptimes');
+    u.searchParams.set('stopId', stopId); u.searchParams.set('n', n); u.searchParams.set('language', state.lang);
+    const r = await fetch(u);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const list = (j.stopTimes || [])
+      .filter(x => !x.cancelled && !x.tripCancelled)
+      .map(x => {
+        const p = x.place || {};
+        const ts = Date.parse(p.departure || p.arrival || '') / 1000 || 0;
+        const sch = Date.parse(p.scheduledDeparture || p.scheduledArrival || '') / 1000 || ts;
+        return {
+          line: x.routeShortName || x.displayName || x.tripShortName || '', head: x.headsign || '',
+          ts, sch, live: !!x.realTime, mode: x.mode,
+          c: normColor(x.routeColor), t: normColor(x.routeTextColor),
+        };
+      })
+      .filter(x => x.ts)
+      .sort((a, b) => a.ts - b.ts);
+    state.arrivals[key] = { list, at: nowS(), error: false, fetched: Date.now() };
+    state.lastOk = Date.now();
+  } catch {
+    state.arrivals[key] = { list: prev ? prev.list : [], at: prev ? prev.at : 0, error: true, fetched: Date.now() };
+  }
+  return state.arrivals[key];
+}
+
 /* Service alerts (GTFS-RT style). Parsed defensively: both camelCase and snake_case. */
 async function loadAlerts() {
   try {
@@ -228,7 +292,11 @@ async function loadAlerts() {
   } catch { state.alerts = []; }
 }
 
+const isCm = trip => (trip.source || 'cm') === 'cm';
+const arrKey = trip => isCm(trip) ? trip.stopId : trKey(trip.stopId);
+
 function alertsForTrip(trip) {
+  if (!isCm(trip)) return [];
   const stopLines = trip.lines.length ? trip.lines : (stopById(trip.stopId)?.lines || []);
   return state.alerts.filter(a =>
     a.stops.has(trip.stopId) ||
@@ -242,7 +310,7 @@ const clock = ts => new Date(ts * 1000).toLocaleTimeString(state.lang === 'pt' ?
 const fold = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 function upcomingFor(trip) {
-  const a = state.arrivals[trip.stopId];
+  const a = state.arrivals[arrKey(trip)];
   if (!a) return null;
   const now = nowS();
   return a.list.filter(x => x.ts >= now - 30 && (!trip.lines.length || trip.lines.includes(x.line)));
@@ -261,8 +329,15 @@ function leavePlan(deps, walk) {
   return { kind: 'none' };
 }
 
-function badge(lineId) {
-  const li = lineInfo(lineId);
+// Line name and colours: Carris Metropolitana lines from its API, others from the departure itself.
+function lineLook(lineId, d, trip) {
+  if (d && d.c) return { s: lineId, c: d.c, t: d.t || '#FFFFFF' };
+  const meta = trip?.lineMeta?.[lineId];
+  if (meta && meta.c) return { s: lineId, c: meta.c, t: meta.t || '#FFFFFF' };
+  return lineInfo(lineId);
+}
+function badge(lineId, d, trip) {
+  const li = lineLook(lineId, d, trip);
   const b = document.createElement('span');
   b.className = 'badge';
   b.textContent = li.s;
@@ -296,7 +371,9 @@ function renderTrip(trip) {
   node.dataset.id = trip.id;
   const stop = stopById(trip.stopId);
   node.querySelector('.trip-name').textContent = trip.name || trip.stopName;
-  const stopTxt = trip.name ? `${trip.stopName}, ${t('stopNo')} ${trip.stopId}` : `${t('stopNo')} ${trip.stopId}`;
+  const op = isCm(trip) ? 'Carris Metropolitana' : operatorOf(trip.stopId).name;
+  const idTxt = isCm(trip) ? `${t('stopNo')} ${trip.stopId}` : op;
+  const stopTxt = trip.name ? [trip.stopName, idTxt].filter(Boolean).join(', ') : (isCm(trip) ? idTxt : op);
   node.querySelector('.trip-stop').textContent = trip.from ? `${t('fromTo', trip.from.label)} \u2192 ${stopTxt}` : stopTxt;
 
   // Alerts
@@ -317,7 +394,7 @@ function renderTrip(trip) {
   const num = node.querySelector('.leave-num');
   const txt = node.querySelector('.leave-text');
   const list = node.querySelector('.deps');
-  const arr = state.arrivals[trip.stopId];
+  const arr = state.arrivals[arrKey(trip)];
   const deps = upcomingFor(trip);
 
   if (!deps) {
@@ -337,7 +414,7 @@ function renderTrip(trip) {
     txt.innerHTML = '';
     const st = document.createElement('strong');
     st.textContent = plan.kind === 'hurry' ? t('leaveNow') : t('leaveIn');
-    txt.append(st, document.createTextNode(t('toCatch', lineInfo(plan.dep.line).s, clock(plan.dep.ts))));
+    txt.append(st, document.createTextNode(t('toCatch', lineLook(plan.dep.line, plan.dep, trip).s, clock(plan.dep.ts))));
   }
 
   if (arr?.error && !deps.length) {
@@ -362,7 +439,7 @@ function renderTrip(trip) {
     m.append(mins <= 0 ? t('now') : `${mins} ${t('min')}`);
     const c = document.createElement('span'); c.className = 'dep-clock'; c.textContent = clock(d.ts);
     time.append(m, c);
-    li.append(badge(d.line), head, time);
+    li.append(badge(d.line, d, trip), head, time);
     list.append(li);
   });
   return node;
@@ -391,8 +468,12 @@ async function refresh() {
   window.dispatchEvent(new Event('px:refresh')); // the planner refreshes its own live data
   if (refreshing || !state.trips.length) { render(); return; }
   refreshing = true;
-  const stopIds = [...new Set(state.trips.map(tr => tr.stopId))];
-  await Promise.all([...stopIds.map(loadArrivals), loadAlerts()]);
+  const cmStops = [...new Set(state.trips.filter(isCm).map(tr => tr.stopId))];
+  const trStops = [...new Set(state.trips.filter(tr => !isCm(tr)).map(tr => tr.stopId))]
+    .filter(id => Date.now() - (state.arrivals[trKey(id)]?.fetched || 0) > CONFIG.TR_REFRESH_MS - 5000);
+  const jobs = [...cmStops.map(id => loadArrivals(id)), ...trStops.map(id => loadTrArrivals(id))];
+  if (cmStops.length) jobs.push(loadAlerts());
+  await Promise.all(jobs);
   refreshing = false;
   render();
 }
@@ -426,7 +507,11 @@ async function openEditor(trip) {
   if (trip) fillDetails();
   else setTimeout(() => $('#fromSearch').focus(), 50);
   if (!state.stops) {
-    try { await loadNetwork(); if (trip) fillDetails(); else if (!$('#stepStop').hidden) showNearest(); }
+    try {
+      await loadNetwork();
+      if (trip) { if (isCm(trip)) state.editing.lineOpts = null; fillDetails(); }
+      else if (!$('#stepStop').hidden) showNearest();
+    }
     catch { $('#stopStatus').textContent = t('stopsError'); }
   }
 }
@@ -531,60 +616,126 @@ function chooseFrom(place) {
   showNearest();
 }
 
-/* Step 2: stop */
+/* Step 2: stop or station, from every operator */
 function distFrom(stop) {
   const f = state.editing?.from;
   return f ? haversine(f.lat, f.lon, stop.lat, stop.lon) : null;
 }
 
-function showNearest() {
+// One shape for every candidate stop: Carris Metropolitana ones keep their 6-digit id for live data.
+function candFromTr(p) {
+  const trId = p.stopId || p.id;
+  const cm = cmIdFrom(trId);
+  const op = operatorOf(trId);
+  if (!op.name && p.modes?.length) op.mode = p.modes[0];
+  return { source: cm ? 'cm' : 'tr', id: cm || trId, trId, name: p.name, lat: +p.lat, lon: +p.lon, op,
+    place: cm ? (stopById(cm)?.place || '') : '', lines: cm ? (stopById(cm)?.lines || []) : [] };
+}
+const candFromCm = s => ({ source: 'cm', id: s.id, trId: null, name: s.name, lat: s.lat, lon: s.lon,
+  op: { name: 'Carris Metropolitana', mode: 'BUS' }, place: s.place, lines: s.lines });
+
+// Merge, drop duplicates (same operator + same name close together, e.g. two platforms), sort by distance.
+function mergeCands(list, limit) {
+  const out = [];
+  for (const c of list) {
+    c.dist = distFrom(c);
+    const dup = out.find(o => (o.source === 'cm' && c.source === 'cm' && o.id === c.id) ||
+      (o.op.name === c.op.name && fold(o.name) === fold(c.name) && haversine(o.lat, o.lon, c.lat, c.lon) < 250));
+    if (dup) { if (!dup.trId && c.trId) dup.trId = c.trId; continue; }
+    out.push(c);
+  }
+  out.sort((x, y) => (x.dist ?? 0) - (y.dist ?? 0));
+  return out.slice(0, limit);
+}
+
+let nearReq = 0;
+async function showNearest() {
   const status = $('#stopStatus');
-  if (!state.stops) { status.textContent = t('loadingStops'); return; }
-  if (!state.editing?.from) { status.textContent = ''; $('#stopResults').replaceChildren(); return; }
-  const items = state.stops.map(s => ({ stop: s, dist: distFrom(s) })).sort((a, b) => a.dist - b.dist).slice(0, 15);
-  status.textContent = t('nearest');
+  const f = state.editing?.from;
+  if (!f) { status.textContent = ''; $('#stopResults').replaceChildren(); return; }
+  const id = ++nearReq;
+  status.textContent = t('nearLoading');
+  const local = (state.stops || []).filter(s => haversine(f.lat, f.lon, s.lat, s.lon) < CONFIG.NEAR_RADIUS_M).map(candFromCm);
+  let remote = [];
+  try {
+    const dLat = CONFIG.NEAR_RADIUS_M / 111320, dLon = dLat / Math.cos(f.lat * Math.PI / 180);
+    const box = (lo1, lo2) => {
+      const u = new URL(CONFIG.TRANSITOUS + '/api/v1/map/stops');
+      u.searchParams.set('min', `${f.lat - dLat},${lo1}`); u.searchParams.set('max', `${f.lat + dLat},${lo2}`);
+      return fetch(u).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    };
+    let res = await box(f.lon - dLon, f.lon + dLon);
+    if (!Array.isArray(res) || !res.length) res = await box(f.lon + dLon, f.lon - dLon);
+    remote = (Array.isArray(res) ? res : []).filter(p => p.name && (p.stopId || p.id)).map(candFromTr);
+  } catch {
+    if (!local.length && id === nearReq) { status.textContent = t('nearError'); return; }
+  }
+  if (id !== nearReq || $('#stopSearch').value.trim()) return;
+  const items = mergeCands([...remote, ...local], 20);
+  status.textContent = items.length ? t('nearest') : t('noResults');
   renderResults(items);
 }
 
 function renderResults(items) {
   const ul = $('#stopResults');
-  ul.replaceChildren(...items.map(({ stop, dist }) => {
+  ul.replaceChildren(...items.map(c => {
     const li = document.createElement('li');
     const b = document.createElement('button'); b.type = 'button';
     const left = document.createElement('span');
-    const n = document.createElement('span'); n.className = 'res-name'; n.textContent = stop.name;
+    const n = document.createElement('span'); n.className = 'res-name';
+    if (typeof icon === 'function') { const ic = icon(c.op.mode); ic.classList.add('res-icon'); n.append(ic); }
+    n.append(c.name);
     const m = document.createElement('span'); m.className = 'res-meta';
-    const lineTxt = stop.lines.slice(0, 6).map(l => lineInfo(l).s).join(', ') + (stop.lines.length > 6 ? '…' : '');
-    m.textContent = [stop.place, lineTxt].filter(Boolean).join(' / ');
+    const lineTxt = c.lines.slice(0, 6).map(l => lineInfo(l).s).join(', ') + (c.lines.length > 6 ? '…' : '');
+    m.textContent = [c.op.name, c.place, lineTxt].filter(Boolean).join(' / ');
     left.append(n, m);
     const side = document.createElement('span'); side.className = 'res-side';
-    side.textContent = dist != null ? fmtDist(dist) : `${t('stopNo')} ${stop.id}`;
+    side.textContent = c.dist != null ? fmtDist(c.dist) : '';
     b.append(left, side);
-    b.addEventListener('click', () => chooseStop(stop));
+    b.addEventListener('click', () => chooseStop(c));
     li.append(b);
     return li;
   }));
 }
 
+let searchReq = 0, remoteTimer;
 function searchStops(q) {
-  if (!state.stops) return;
   const status = $('#stopStatus');
   const qq = fold(q).trim();
   if (!qq) { showNearest(); return; }
   if (qq.length < 2) { $('#stopResults').replaceChildren(); status.textContent = t('typeMore'); return; }
+  const id = ++searchReq;
+  // Carris Metropolitana stops are searched on the device straight away…
   const tokens = qq.split(/\s+/);
-  const hits = [];
-  for (const s of state.stops) {
-    if (s.id === qq) { hits.unshift({ stop: s, score: -1 }); continue; }
-    const hay = fold(s.name + ' ' + s.place);
-    if (tokens.every(tok => hay.includes(tok))) hits.push({ stop: s, score: fold(s.name).startsWith(tokens[0]) ? 0 : 1 });
-    if (hits.length > 400) break;
+  const local = [];
+  for (const s of state.stops || []) {
+    if (s.id === qq || tokens.every(tok => fold(s.name + ' ' + s.place).includes(tok))) local.push(candFromCm(s));
+    if (local.length > 200) break;
   }
-  hits.forEach(h => { h.dist = distFrom(h.stop); });
-  // Closest first when we know the starting point, otherwise best name match.
-  hits.sort((a, b) => a.score - b.score || (a.dist != null ? a.dist - b.dist : a.stop.name.localeCompare(b.stop.name)));
-  status.textContent = hits.length ? '' : t('noResults');
-  renderResults(hits.slice(0, 40));
+  const show = (list) => {
+    const items = mergeCands(list, 40);
+    if (!state.editing?.from) items.sort((x, y) => x.name.localeCompare(y.name));
+    status.textContent = items.length ? '' : t('noResults');
+    renderResults(items);
+  };
+  show(local);
+  // …and every operator through the journey planner's stop search, shortly after typing stops.
+  clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(async () => {
+    try {
+      const u = new URL(CONFIG.TRANSITOUS + '/api/v1/geocode');
+      u.searchParams.set('text', q.trim()); u.searchParams.set('type', 'STOP'); u.searchParams.set('language', state.lang);
+      const f = state.editing?.from;
+      if (f) u.searchParams.set('place', `${f.lat},${f.lon}`);
+      else u.searchParams.set('place', '38.72,-9.14');
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const res = await r.json();
+      if (id !== searchReq) return;
+      const remote = (Array.isArray(res) ? res : []).filter(m => m.name && m.id && (!m.country || m.country === 'PT')).map(candFromTr);
+      show([...remote, ...local]);
+    } catch { /* keep the local results */ }
+  }, 450);
 }
 
 function haversine(a, b, c, d) {
@@ -594,14 +745,34 @@ function haversine(a, b, c, d) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-function chooseStop(stop) {
+function chooseStop(c) {
   const e = state.editing;
-  if (e.stopId !== stop.id) e.lines = [];
-  e.stopId = stop.id; e.stopName = stop.name;
+  if (e.stopId !== c.id) { e.lines = []; e.lineMeta = {}; }
+  e.source = c.source; e.stopId = c.id; e.trId = c.trId || null; e.stopName = c.name;
+  e.lineOpts = null;
   e.walkTouched = false;
   showStep('details');
   fillDetails();
-  computeWalk(stop);
+  computeWalk(c);
+}
+
+/* Lines at the chosen stop: from Carris Metropolitana data, or from upcoming departures. */
+async function loadLineOpts(e) {
+  if (e.source === 'cm' || !e.source) {
+    const stop = stopById(e.stopId);
+    if (stop) { e.lineOpts = stop.lines.map(id => ({ id, ...lineInfo(id) })); fillDetails(); return; }
+    if (!e.trId) { e.lineOpts = e.lines.map(id => ({ id, ...lineInfo(id) })); fillDetails(); return; }
+  }
+  const trId = e.source === 'tr' ? e.stopId : e.trId;
+  $('#lineChips').replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: t('loadingLines') }));
+  const res = await loadTrArrivals(trId, 80);
+  if (state.editing !== e) return;
+  const seen = new Map();
+  res.list.forEach(d => { if (d.line && !seen.has(d.line)) seen.set(d.line, { id: d.line, s: d.line, c: d.c || '#1F3A8A', t: d.t || '#FFFFFF', n: d.head }); });
+  e.lines.forEach(id => { if (!seen.has(id)) seen.set(id, { id, s: id, ...(e.lineMeta?.[id] || { c: '#1F3A8A', t: '#FFFFFF' }) }); });
+  e.lineOpts = [...seen.values()].sort((a, b) => a.s.localeCompare(b.s, undefined, { numeric: true }));
+  e.lineMeta = Object.fromEntries(e.lineOpts.map(o => [o.id, { c: o.c, t: o.t }]));
+  fillDetails();
 }
 
 /* Walking time from the starting point to the stop */
@@ -634,19 +805,34 @@ async function computeWalk(stop) {
 /* Step 3: details */
 function fillDetails() {
   const e = state.editing;
-  const stop = stopById(e.stopId);
+  const cm = (e.source || 'cm') === 'cm';
+  const stop = cm ? stopById(e.stopId) : null;
   $('#chosenName').textContent = e.stopName;
-  $('#chosenMeta').textContent = [stop?.place, `${t('stopNo')} ${e.stopId}`].filter(Boolean).join(', ');
+  $('#chosenMeta').textContent = cm
+    ? [stop?.place, `${t('stopNo')} ${e.stopId}`].filter(Boolean).join(', ')
+    : operatorOf(e.stopId).name;
   $('#chosenFrom').textContent = e.from ? t('fromLine', e.from.label) : '';
   $('#chosenFrom').hidden = !e.from;
-  $('#tripName').value = e.name || '';
-  $('#walkMin').value = e.walk ?? 5;
+  if (document.activeElement !== $('#tripName')) $('#tripName').value = e.name || '';
+  if (document.activeElement !== $('#walkMin')) $('#walkMin').value = e.walk ?? 5;
   const chips = $('#lineChips');
-  const lineIds = stop ? stop.lines : e.lines;
-  chips.replaceChildren(...lineIds.map(id => {
-    const li = lineInfo(id);
+  if (!e.lineOpts && !e.loadingLines) {
+    e.loadingLines = true;
+    loadLineOpts(e).finally(() => { e.loadingLines = false; });
+    return; // loadLineOpts calls fillDetails again (immediately for Carris Metropolitana stops)
+  }
+  if (!e.lineOpts) {
+    chips.replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: t('loadingLines') }));
+    return;
+  }
+  if (!e.lineOpts.length) {
+    chips.replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: t('noLinesFound') }));
+    return;
+  }
+  chips.replaceChildren(...e.lineOpts.map(li => {
+    const id = li.id;
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'chip'; b.textContent = li.s; b.title = li.n;
+    b.type = 'button'; b.className = 'chip'; b.textContent = li.s; b.title = li.n || '';
     const on = () => e.lines.includes(id);
     const paint = () => {
       b.setAttribute('aria-pressed', on());
@@ -668,7 +854,8 @@ function saveTrip(ev) {
   if (!e?.stopId || $('#stepDetails').hidden) return;
   e.name = $('#tripName').value.trim();
   e.walk = Math.max(0, Math.min(60, parseInt($('#walkMin').value, 10) || 0));
-  const { walkTouched, ...trip } = e;
+  const { walkTouched, lineOpts, loadingLines, ...trip } = e;
+  trip.source = trip.source || 'cm';
   if (trip.id) state.trips = state.trips.map(tr => tr.id === trip.id ? trip : tr);
   else { trip.id = 't' + Date.now().toString(36); state.trips.push(trip); }
   store.set('px_trips', state.trips);

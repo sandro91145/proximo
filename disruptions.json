@@ -1,17 +1,7 @@
 {
-  "updated": "2026-10-21T13:55:00+01:00",
+  "updated": "2026-10-22T11:50:00+01:00",
   "note": "Strikes and major disruptions in the Lisbon area, today to 7 days ahead. Written by the daily news check. operator keys: metro, mts, boat, cp, fertagus, cm, carris, tcb. scope: full = no normal service in the window (app avoids it automatically); partial = some service affected (app only warns).",
   "items": [
-    {
-      "operator": "mts",
-      "kind": "strike",
-      "scope": "full",
-      "title": "Greve dos maquinistas do Metro Sul do Tejo",
-      "start": "2026-10-21T00:00:00+01:00",
-      "end": "2026-10-22T00:00:00+01:00",
-      "minimum": "Linha 3 Cacilhas – Universidade, 07:00–09:00 e 17:00–19:00",
-      "source": "https://observador.pt/2026/10/20/trabalhadores-da-metro-transportes-do-sul-em-greve-entre-terca-feira-e-quarta-feira/"
-    },
     {
       "operator": "mts",
       "kind": "strike",

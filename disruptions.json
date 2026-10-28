@@ -1,36 +1,16 @@
 {
-  "updated": "2026-10-27T11:15:00+00:00",
+  "updated": "2026-10-28T11:45:00+00:00",
   "note": "Strikes and major disruptions in the Lisbon area, today to 7 days ahead. Written by the daily news check. operator keys: metro, mts, boat, cp, fertagus, cm, carris, tcb. scope: full = no normal service in the window (app avoids it automatically); partial = some service affected (app only warns).",
   "items": [
     {
-      "operator": "mts",
+      "operator": "cp",
       "kind": "strike",
       "scope": "partial",
-      "title": "Greve dos maquinistas do MTS nas últimas duas horas de cada serviço",
-      "start": "2026-10-22T00:00:00+01:00",
-      "end": "2026-10-28T03:00:00+00:00",
-      "minimum": "Linha 3 Cacilhas – Universidade, 07:00–09:00 e 17:00–19:00 até 27 de outubro (a Linha 2 não tem serviços mínimos)",
-      "source": "https://www.timeout.pt/lisboa/pt/noticias/metro-na-margem-sul-com-greve-e-perturbacoes-durante-uma-semana-102026"
-    },
-    {
-      "operator": "metro",
-      "kind": "strike",
-      "scope": "full",
-      "title": "Greve parcial no Metro de Lisboa",
-      "start": "2026-10-28T05:00:00+00:00",
-      "end": "2026-10-28T10:00:00+00:00",
-      "minimum": "Sem serviços mínimos (o Metro recorreu da decisão)",
-      "source": "https://observador.pt/2026/10/16/greve-regressa-ao-metro-de-lisboa-nos-dias-28-e-30-de-outubro-desta-vez-vai-ser-parcial-das-5h00-as-10h00/"
-    },
-    {
-      "operator": "metro",
-      "kind": "strike",
-      "scope": "full",
-      "title": "Greve parcial no Metro de Lisboa",
-      "start": "2026-10-30T05:00:00+00:00",
-      "end": "2026-10-30T10:00:00+00:00",
-      "minimum": "Sem serviços mínimos (o Metro recorreu da decisão)",
-      "source": "https://observador.pt/2026/10/16/greve-regressa-ao-metro-de-lisboa-nos-dias-28-e-30-de-outubro-desta-vez-vai-ser-parcial-das-5h00-as-10h00/"
+      "title": "Greve na CP (SFRCI) – possíveis perturbações também a 29 e 31 de outubro",
+      "start": "2026-10-30T00:00:00+00:00",
+      "end": "2026-10-30T23:59:00+00:00",
+      "minimum": "Sem serviços mínimos definidos até ao momento",
+      "source": "https://www.razaoautomovel.com/noticias/greve-comboios-de-portugal-e-metro-de-lisboa-semana-44-2026/"
     }
   ]
 }

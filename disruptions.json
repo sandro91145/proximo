@@ -1,16 +1,5 @@
 {
-  "updated": "2026-10-29T11:55:00+00:00",
+  "updated": "2026-10-30T11:45:00+00:00",
   "note": "Strikes and major disruptions in the Lisbon area, today to 7 days ahead. Written by the daily news check. operator keys: metro, mts, boat, cp, fertagus, cm, carris, tcb. scope: full = no normal service in the window (app avoids it automatically); partial = some service affected (app only warns).",
-  "items": [
-    {
-      "operator": "cp",
-      "kind": "strike",
-      "scope": "partial",
-      "title": "Greve na CP (SFRCI) – possíveis perturbações também a 29 e 31 de outubro",
-      "start": "2026-10-30T00:00:00+00:00",
-      "end": "2026-10-30T23:59:00+00:00",
-      "minimum": "Sem serviços mínimos definidos até ao momento",
-      "source": "https://www.razaoautomovel.com/noticias/greve-comboios-de-portugal-e-metro-de-lisboa-semana-44-2026/"
-    }
-  ]
+  "items": []
 }

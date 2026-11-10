@@ -1,5 +1,16 @@
 {
-  "updated": "2026-11-09T14:25:00+00:00",
+  "updated": "2026-11-10T13:55:00+00:00",
   "note": "Strikes and major disruptions in the Lisbon area, today to 7 days ahead. Written by the daily news check. operator keys: metro, mts, boat, cp, fertagus, cm, carris, tcb. scope: full = no normal service in the window (app avoids it automatically); partial = some service affected (app only warns).",
-  "items": []
+  "items": [
+    {
+      "operator": "mts",
+      "kind": "strike",
+      "scope": "partial",
+      "title": "Greve total dos maquinistas do Metro Sul do Tejo (SMAQ)",
+      "start": "2026-11-16T00:00:00+00:00",
+      "end": "2026-11-18T23:59:00+00:00",
+      "minimum": "Serviços mínimos não divulgados (por confirmar)",
+      "source": "https://observador.pt/2026/10/30/trabalhadores-da-metro-transportes-do-sul-marcam-nova-greve-total-para-novembro-apos-adesao-de-100-em-outubro/"
+    }
+  ]
 }

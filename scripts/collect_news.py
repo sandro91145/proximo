@@ -22,43 +22,43 @@ SECTIONS = {
     "desporto": "Desporto",
 }
 
-# (source name, feed URL, section) — section "auto" sorts each story by the feed's own category/link.
+# (source name, feed URL, section). "auto" sorts each story by its own category labels / link path,
+# and skips stories that fit none of the sections (culture, lifestyle, radio shows…).
 FEEDS = [
     ("RTP Notícias", "https://www.rtp.pt/noticias/rss", "auto"),
-    ("Observador", "https://observador.pt/seccao/pais/feed/", "portugal"),
-    ("Observador", "https://observador.pt/seccao/mundo/feed/", "portugal"),
-    ("Observador", "https://observador.pt/seccao/politica/feed/", "portugal"),
-    ("Expresso", "https://feeds.feedburner.com/expresso-geral", "portugal"),
-    ("Renascença", "https://rr.pt/rssfeed-ultimas", "portugal"),
-    ("Público", "https://feeds.feedburner.com/PublicoRSS", "portugal"),
+    ("Observador", "https://observador.pt/feed/", "auto"),
+    ("Expresso", "https://feeds.feedburner.com/expresso-geral", "auto"),
+    ("Público", "https://feeds.feedburner.com/PublicoRSS", "auto"),
     ("ECO", "https://eco.sapo.pt/feed/", "economia"),
     ("Jornal de Negócios", "https://www.jornaldenegocios.pt/rss", "economia"),
-    ("Observador", "https://observador.pt/seccao/economia/feed/", "economia"),
-    ("Observador", "https://observador.pt/seccao/ciencia/feed/", "tecnologia"),
-    ("Observador", "https://observador.pt/seccao/tecnologia/feed/", "tecnologia"),
-    ("Exame Informática", "https://visao.pt/exameinformatica/feed/", "tecnologia"),
+    ("O Jornal Económico", "https://jornaleconomico.sapo.pt/feed", "economia"),
     ("Pplware", "https://pplware.sapo.pt/feed/", "tecnologia"),
     ("Record", "https://www.record.pt/rss", "desporto"),
-    ("O Jogo", "https://www.ojogo.pt/rss", "desporto"),
-    ("Observador", "https://observador.pt/seccao/desporto/feed/", "desporto"),
 ]
 
-# For "auto" feeds: words in the category or link path that place a story in a section.
+# For "auto" feeds, checked in this order: words in a story's categories or link path.
 AUTO_RULES = [
-    ("desporto", ["desporto", "futebol", "modalidades"]),
-    ("economia", ["economia", "trabalho", "emprego", "negocios", "financas"]),
-    ("tecnologia", ["ciencia", "tecnologia", "inovacao", "saude"]),
-    ("portugal", ["pais", "mundo", "politica", "sociedade", "europa", "justica", "local"]),
+    ("desporto", ["desporto", "futebol", "modalidades", "motores", "tenis", "ciclismo", "atletismo", "basquetebol", "andebol", "futsal"]),
+    ("economia", ["economia", "trabalho", "emprego", "negocios", "financas", "empresas", "mercados", "impostos",
+                  "orcamento do estado", "banca", "imobiliario", "dinheiro", "salarios", "pensoes"]),
+    ("tecnologia", ["ciencia", "tecnologia", "inovacao", "inteligencia artificial", "espaco", "internet",
+                    "digital", "startups", "astronomia", "tech"]),
+    ("portugal", ["pais", "mundo", "politica", "sociedade", "europa", "uniao europeia", "justica", "local", "nacional",
+                  "internacional", "saude", "educacao", "habitacao", "ambiente", "africa", "america", "asia",
+                  "guerra", "ucrania", "eleicoes", "governo", "parlamento", "lisboa", "porto"]),
 ]
 
 MAX_PER_SECTION = 40
 MAX_AGE = timedelta(hours=48)
-SKIP_LINK = re.compile(r"/(opiniao|opinion|cronica|cronicas|podcast|podcasts|video|videos|fotogaleria|publicidade|patrocinado)/", re.I)
+SKIP_LINK = re.compile(r"/(opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
 UA = "Proximo-news/1.0 (+https://github.com/sandro91145/proximo)"
 
 
 def plain(s, limit=None):
-    s = html.unescape(re.sub(r"<[^>]+>", " ", s or ""))
+    s = s or ""
+    for _ in range(2):  # some feeds escape CDATA or HTML twice
+        s = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", html.unescape(s), flags=re.S)
+    s = html.unescape(re.sub(r"<[^>]+>", " ", s))
     s = re.sub(r"\s+", " ", s).strip()
     if limit and len(s) > limit:
         s = s[:limit].rsplit(" ", 1)[0].rstrip(".,;:–- ") + "…"
@@ -85,6 +85,7 @@ def parse_date(s):
     s = (s or "").strip()
     if not s:
         return None
+    s = re.sub(r"\s(Z|UT|UTC)$", " +0000", s)  # e.g. "Fri, 13 Nov 2026 20:17:00 Z"
     try:
         d = parsedate_to_datetime(s)          # RSS: "Sat, 14 Nov 2026 06:14:13 +0000"
     except (TypeError, ValueError):

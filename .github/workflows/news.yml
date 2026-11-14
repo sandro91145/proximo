@@ -1,0 +1,42 @@
+# Collects the latest headlines every hour and publishes them as news.json on the
+# "news-data" branch (one commit, replaced each time, so main's history stays clean).
+# The app reads it from raw.githubusercontent.com. No secrets or Claude usage needed.
+
+name: Update news
+
+on:
+  schedule:
+    - cron: '7 * * * *'   # every hour at :07 (GitHub may start a few minutes late)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: news-data
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect headlines
+        run: |
+          mkdir -p out
+          python3 scripts/collect_news.py out/news.json
+
+      - name: Publish to the news-data branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          git init -q -b news-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add news.json
+          git commit -q -m "News $(date -u +%FT%H:%MZ)"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" news-data
+          echo "Published $(python3 -c "import json;d=json.load(open('news.json'));print(sum(len(s['items']) for s in d['sections'].values()))") headlines."

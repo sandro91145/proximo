@@ -1,12 +1,29 @@
 # Próximo
 
-Strikes and disruptions on Lisbon public transport, today and the next 7 days.
+News from reliable Portuguese outlets, plus strikes and disruptions on Lisbon public transport.
 An installable web app (PWA) for phone and PC, no build step.
 
 The journey planner, saved trips, journey mode and map were removed in November 2026.
 That version is kept on the `travel-version` branch.
 
-## What it shows
+## Sections
+
+A row of selectors at the top: **Início** (home), **Transportes**, **Portugal & Mundo**, **Economia & Trabalho**,
+**Tecnologia & Ciência** and **Desporto**. The home page shows the transport status and the top headlines of each
+section; each section shows its latest headlines with source, time and a short excerpt, linking to the full article.
+
+### News
+
+`scripts/collect_news.py` reads the public RSS feeds of RTP Notícias, Observador, Expresso, Público, ECO,
+Jornal de Negócios, O Jornal Económico, Pplware and Record. General feeds are sorted into sections by each story's
+own category labels or link. Duplicates across outlets are merged; opinion pieces, radio programmes, live blogs,
+quizzes and shopping deals are skipped; stories older than 48 hours are dropped. Only the headline, a short excerpt,
+the source, the time and the link are kept.
+
+`.github/workflows/news.yml` runs it every hour and publishes `news.json` to the `news-data` branch (a single commit,
+replaced each time). The app reads it from `raw.githubusercontent.com`. No secrets or Claude usage needed.
+
+### Transportes
 
 - At the top, the one thing to know now: a strike happening today, or that everything is running.
 - The next announced strike underneath.

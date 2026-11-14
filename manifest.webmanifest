@@ -1,7 +1,7 @@
 {
-  "name": "Próximo: greves nos transportes",
+  "name": "Próximo: notícias e greves",
   "short_name": "Próximo",
-  "description": "Greves e perturbações nos transportes de Lisboa, hoje e nos próximos dias.",
+  "description": "Notícias de fontes portuguesas fiáveis e greves nos transportes de Lisboa.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

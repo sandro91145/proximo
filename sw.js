@@ -1,7 +1,7 @@
 // Caches the app itself so it opens instantly and offline.
 // The strike list (disruptions.json) is always fetched fresh; the page keeps its own last copy.
-const VERSION = 'proximo-v13';
-const SHELL = ['./', 'index.html', 'styles.css?v=13', 'app.js?v=13', 'manifest.webmanifest',
+const VERSION = 'proximo-v14';
+const SHELL = ['./', 'index.html', 'styles.css?v=14', 'app.js?v=14', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

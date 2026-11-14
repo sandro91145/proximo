@@ -51,6 +51,10 @@ AUTO_RULES = [
 MAX_PER_SECTION = 40
 MAX_AGE = timedelta(hours=48)
 SKIP_LINK = re.compile(r"/(opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
+# Shopping deals and sponsored posts aren't news.
+SKIP_TITLE = re.compile(r"\bquiz\b|black friday|cyber monday|cup[aã]o|c[oó]digo promocional|desconto|promo[cç][aã]o|aproveite|oferta especial|patrocinad", re.I)
+# Boilerplate some feeds put at the start of the excerpt.
+JUNK_SUMMARY = re.compile(r"^(se est[aá] a ler esta not[ií]cia numa app[^.]*\.?|leia mais[^.]*\.?)\s*", re.I)
 UA = "Proximo-news/1.0 (+https://github.com/sandro91145/proximo)"
 
 
@@ -152,7 +156,7 @@ def main(out_path):
         for en in entries:
             link = (en["link"] or "").strip()
             title = plain(en["title"])
-            if not link.startswith("http") or not title or SKIP_LINK.search(link):
+            if not link.startswith("http") or not title or SKIP_LINK.search(link) or SKIP_TITLE.search(title):
                 continue
             sec = auto_section(en) if section == "auto" else section
             if sec not in items:
@@ -165,7 +169,7 @@ def main(out_path):
                 "link": link,
                 "source": source,
                 "time": ts.replace(microsecond=0).isoformat().replace("+00:00", "Z") if ts else None,
-                "summary": plain(en["summary"], 220),
+                "summary": plain(JUNK_SUMMARY.sub("", plain(en["summary"])), 220),
             })
             kept += 1
         report.append({"source": source, "url": url, "ok": True, "entries": len(entries), "kept": kept})

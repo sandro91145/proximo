@@ -1,7 +1,7 @@
 // Caches the app itself so it opens instantly and offline.
-// Live departures are never cached: they always come from the network.
-const VERSION = 'proximo-v12';
-const SHELL = ['./', 'index.html', 'styles.css?v=12', 'app.js?v=12', 'planner.js?v=12', 'map.js?v=12', 'journey.js?v=12', 'manifest.webmanifest',
+// The strike list (disruptions.json) is always fetched fresh; the page keeps its own last copy.
+const VERSION = 'proximo-v13';
+const SHELL = ['./', 'index.html', 'styles.css?v=13', 'app.js?v=13', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -16,9 +16,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return; // API + fonts: straight to network
-  // Network first, so updates you push to GitHub show up right away; cache as fallback.
-  // Always check with the server (no stale browser cache), so a new page never runs with old scripts.
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return; // fonts etc.: straight to network
+  if (url.pathname.endsWith('/disruptions.json')) return;                 // always live
+  // Network first (checking with the server, not a stale browser copy); cache as offline fallback.
   const req = e.request.mode === 'navigate' ? e.request : new Request(e.request, { cache: 'no-cache' });
   e.respondWith(
     fetch(req)

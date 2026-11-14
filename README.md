@@ -1,36 +1,43 @@
 # Próximo
 
-Journey planner for Lisbon public transport, plus live "leave now" countdowns for the trips you make often.
-An installable web app (PWA): one codebase for Android and PC, no build step.
+Strikes and disruptions on Lisbon public transport, today and the next 7 days.
+An installable web app (PWA) for phone and PC, no build step.
 
-## What it does
+The journey planner, saved trips, journey mode and map were removed in November 2026.
+That version is kept on the `travel-version` branch.
 
-**Para onde vais? (journey planner)**
-- Enter a start and destination (street or place, or your current location) and leave now, leave at, or arrive by a time.
-- Shows the best route first (earliest arrival, then fewest changes), then other options, with when to leave,
-  total time, changes and each step: walk, bus, metro, boat or train, with stops and times.
-- Covers every operator in the Lisbon area (Carris Metropolitana, Carris, Metro, CP, Fertagus,
-  Transtejo/Soflusa, MTS, Barreiro buses). Routes use timetables; Carris Metropolitana buses in a route
-  are checked against their live data (late/early), and CP trains have live data from the planner itself.
-- Any route can be saved as a trip.
-- *Evitar hoje* (avoid today), for strike days: tick operators (Metro, MTS, boats, CP, Fertagus,
-  Carris, Carris Metropolitana, TCB). Routes using them move to the end with a warning and are never
-  marked best; the planner also leaves out Metro / MTS / boat / train modes where it can, so it looks
-  for other options. Saved trips on those operators show a warning. It resets the next day.
-- Strikes from the news: `disruptions.json` in this repo lists strikes and major disruptions for
-  today and the next days. It's updated every morning by a scheduled news check. The app shows them at the
-  top of the planner, avoids an operator automatically while a full strike is on (tap it under
-  *Evitar hoje* to use it anyway), warns on partial strikes, and marks affected routes and saved trips.
+## What it shows
 
-### Automatic updates (GitHub Action)
+- At the top, the one thing to know now: a strike happening today, or that everything is running.
+- The next announced strike underneath.
+- A card per strike or disruption, grouped by day: operator, when, whether there's no service
+  or only some service is affected, minimum services, a link to the news and the operator's website.
+- When the list was last checked, and a warning if it hasn't been updated for over 36 hours.
+- Works offline with the last list it loaded. Portuguese / English, light / dark mode.
+
+Operators: Metro de Lisboa, Metro Sul do Tejo, Transtejo/Soflusa, CP, Fertagus, Carris Metropolitana,
+Carris and TCB Barreiro.
+
+## Put it online (GitHub Pages)
+
+Repository **Settings → Pages → Source: Deploy from a branch → main / root**. It's served at
+`https://<your-user>.github.io/proximo/`. Install it from Chrome (menu → *Install app*) on Android or PC.
+
+## Updating the app
+
+After changing files, bump `VERSION` in `sw.js` and the `?v=` number on `styles.css` / `app.js` in
+`index.html` (and in `sw.js`'s list), so installed copies always load matching files.
+
+## Automatic updates (GitHub Action)
 
 `.github/workflows/strikes.yml` runs every morning (05:50 UTC) and on demand (*Actions → Update strike list →
 Run workflow*). It runs Claude Code with your Claude Pro subscription to check the news and rewrite
-`disruptions.json`, then validates the file and commits it. One-time setup:
+`disruptions.json`, then validates the file and commits it. If the check fails, the step
+*Show why the check failed* prints the reason. One-time setup:
 
 1. On your PC, install Claude Code and run `claude setup-token`; sign in with your Claude account and copy the token.
 2. In this repo: *Settings → Secrets and variables → Actions → New repository secret*, name it
-   `CLAUDE_CODE_OAUTH_TOKEN` and paste the token.
+   `CLAUDE_CODE_OAUTH_TOKEN` and paste the token. If the token is ever revoked, create a new one and update the secret.
 
 ### disruptions.json format
 
@@ -41,82 +48,6 @@ Run workflow*). It runs Claude Code with your Claude Pro subscription to check t
   "title": "short Portuguese title", "start": "ISO time", "end": "ISO time",
   "minimum": "minimum services, or empty", "source": "news URL" } ] }
 ```
-- Interactive map (button *Mapa*): start and destination pins you can drag, tap anywhere to
-  choose *Partir daqui* / *Ir para aqui*, and the selected route drawn per leg (coloured lines for
-  transit, dashed for walking, dots where you get on and off). *Ver no mapa* on any option shows it.
-
-**Journey mode** (*Começar viagem* on any route)
-- Step-by-step screen: walk to the stop, wait (with countdown to departure, live where available),
-  ride (minutes and stops left, *Sai na próxima!* near your stop), next steps and a small map.
-- Without location: follows the timetable; you tap *Cheguei* / *Já entrei* / *Já saí*, and it tells you
-  when you're behind schedule.
-- With *Seguir com a minha localização* (while the app is open; keeps the screen on where supported):
-  moves through the steps by itself, warns before your stop, and recalculates from where you are when
-  you miss a connection (at most every 2 minutes). *Recalcular daqui* does it on demand.
-- Survives closing the app: reopening it brings the journey back until a few hours after arrival.
-
-**As tuas viagens (saved trips)**
-- Works for stops and stations of every operator: Carris Metropolitana, Carris, Metro, CP, Fertagus,
-  Transtejo/Soflusa, MTS and the Barreiro buses. Nearby stops are listed with their operator.
-- Carris Metropolitana stops use Carris' live data; other stops use timetables from Transitous,
-  live where the operator shares it (CP trains for now). They refresh once a minute.
-
-- Save trips in three steps: where you leave from (a street, or your current location),
-  the stop (the closest ones to that street are listed first), and the lines you care about.
-- The walking time is worked out from a walking route between the street and the stop;
-  you can adjust it. Starting points you've used are offered again next time.
-- Each trip shows the next departures (live where the bus is tracked, otherwise the timetable)
-  and how long until you need to leave home.
-- Departures you can no longer catch (closer than your walk time) are greyed out.
-- Active service alerts on your lines show on the trip and as a banner.
-- Refreshes every 30 s while open; the header shows when data last updated and turns red if it goes stale.
-- Portuguese / English, light / dark mode. Trips are saved on the device.
-
-## Put it online (GitHub Pages)
-
-1. Create a new repository on GitHub, e.g. `proximo`.
-2. Upload everything in this folder (keep the `icons/` folder; `supabase/` is optional).
-3. Repository **Settings → Pages → Source: Deploy from a branch → main / root → Save**.
-4. After a minute it's live at `https://<your-user>.github.io/proximo/`.
-
-## Install it
-
-- **Android (Chrome):** open the link → menu ⋮ → *Add to home screen / Install app*.
-- **PC (Chrome or Edge):** open the link → install icon at the right of the address bar.
-
-## If departures don't load (CORS)
-
-The app calls the official Carris Metropolitana API directly from the browser. If the browser
-blocks that, use the included proxy:
-
-1. In your Supabase project: `supabase functions deploy cm-proxy --no-verify-jwt`
-   (code in `supabase/functions/cm-proxy/index.ts`).
-2. In `app.js`, set `CONFIG.PROXY` to `https://<your-project>.supabase.co/functions/v1/cm-proxy`.
-
-The app tries the direct call first and only uses the proxy if that fails.
-
-## Updating the app
-
-After changing files, bump `VERSION` in `sw.js` and the `?v=` number on the scripts and stylesheet in `index.html`
-(and in `sw.js`'s list), so installed copies always load matching files.
-
-## Data and services used
-
-Carris Metropolitana open data API: <https://github.com/carrismetropolitana/api>
-Endpoints used: `/stops`, `/lines`, `/locations/localities`, `/locations/municipalities`,
-`/arrivals/by_stop/:id`, `/alerts`. The stop list is cached on the device for a day.
-
-Journey planning: [Transitous](https://transitous.org) (`/api/v5/plan`), a free community service for
-open-source, non-commercial apps; data sources: <https://transitous.org/sources/>. The app credits it on screen
-and only calls it when you press *Ver percursos* (plus at most every 5 minutes while results are open).
-
-Street search: OpenStreetMap Nominatim (searches only when you press Search, max one request
-per second, as their usage policy asks). Walking routes: OpenStreetMap routing (FOSSGIS, foot profile).
-If the route can't be calculated, the app estimates from the straight-line distance instead.
-Both are only used while choosing places, not while the app refreshes departures.
-
-Map: [Leaflet](https://leafletjs.com) (loaded only when the map is opened) with OpenStreetMap's standard
-tiles, which need no key; the credit is shown on the map, as the OSM tile policy asks.
 
 ## Licence
 

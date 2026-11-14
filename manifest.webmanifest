@@ -1,7 +1,7 @@
 {
-  "name": "Próximo",
+  "name": "Próximo: greves nos transportes",
   "short_name": "Próximo",
-  "description": "Partidas em tempo real das tuas paragens Carris Metropolitana.",
+  "description": "Greves e perturbações nos transportes de Lisboa, hoje e nos próximos dias.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

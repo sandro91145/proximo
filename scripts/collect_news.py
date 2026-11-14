@@ -23,14 +23,22 @@ SECTIONS = {
 }
 
 # Only outlets that can be read without paying. Removed for paywalls: Expresso, Público, Jornal de Negócios.
+# Tried and left out: TSF (blocks feed readers), Shifter (essays, rarely updated), Ciência Viva (broken feed),
+# 4gnews (mostly deals), Exame Informática (feed stale), Renascença and O Jogo (block feed readers).
 # (source name, feed URL, section). "auto" sorts each story by its own category labels / link path,
 # and skips stories that fit none of the sections (culture, lifestyle, radio shows…).
+# "auto:portugal" does the same but puts stories that fit no section under Portugal & Mundo
+# (for general news feeds with few or no labels).
 FEEDS = [
     ("RTP Notícias", "https://www.rtp.pt/noticias/rss", "auto"),
     ("Observador", "https://observador.pt/feed/", "auto"),
+    ("SIC Notícias", "http://feeds.feedburner.com/sicnoticias-ultimas", "auto:portugal"),
+    ("CNN Portugal", "https://cnnportugal.iol.pt/rss", "auto:portugal"),
+    ("SAPO 24", "https://24.sapo.pt/rss", "auto"),
     ("ECO", "https://eco.sapo.pt/feed/", "economia"),
     ("O Jornal Económico", "https://jornaleconomico.sapo.pt/feed", "economia"),
     ("Pplware", "https://pplware.sapo.pt/feed/", "tecnologia"),
+    ("SAPO Tek", "https://tek.sapo.pt/rss", "tecnologia"),
     ("Record", "https://www.record.pt/rss", "desporto"),
 ]
 
@@ -42,13 +50,13 @@ AUTO_RULES = [
     ("tecnologia", ["ciencia", "tecnologia", "inovacao", "inteligencia artificial", "espaco", "internet",
                     "digital", "startups", "astronomia", "tech"]),
     ("portugal", ["pais", "mundo", "politica", "sociedade", "europa", "uniao europeia", "justica", "local", "nacional",
-                  "internacional", "saude", "educacao", "habitacao", "ambiente", "africa", "america", "asia",
+                  "internacional", "atualidade", "saude", "educacao", "habitacao", "ambiente", "africa", "america", "asia",
                   "guerra", "ucrania", "eleicoes", "governo", "parlamento", "lisboa", "porto"]),
 ]
 
 MAX_PER_SECTION = 40
 MAX_AGE = timedelta(hours=48)
-SKIP_LINK = re.compile(r"/(opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
+SKIP_LINK = re.compile(r"/(extras|opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
 # Paid articles of mostly free outlets: Observador's and ECO's subscriber sections, and items whose feed
 # content says they're for subscribers only (ECO marks these).
 PAYWALL_LINK = re.compile(r"(observador\.pt|eco\.sapo\.pt)/(especiais|explicadores|fact-check|factcheck)/", re.I)
@@ -164,7 +172,12 @@ def main(out_path):
                 continue
             if PAYWALL_LINK.search(link) or PAYWALL_TEXT.search(en["raw"]) or PAYWALL_TEXT.search(title):
                 continue
-            sec = auto_section(en) if section == "auto" else section
+            if any(fold(c).strip() in ("opiniao", "opinion", "cronica", "publicidade", "conteudo patrocinado") for c in en["categories"]):
+                continue
+            if section.startswith("auto"):
+                sec = auto_section(en) or (section.split(":", 1)[1] if ":" in section else None)
+            else:
+                sec = section
             if sec not in items:
                 continue
             ts = en["date"]

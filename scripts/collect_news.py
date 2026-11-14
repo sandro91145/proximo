@@ -47,7 +47,7 @@ AUTO_RULES = [
     ("desporto", ["desporto", "futebol", "modalidades", "motores", "tenis", "ciclismo", "atletismo", "basquetebol", "andebol", "futsal"]),
     ("economia", ["economia", "trabalho", "emprego", "negocios", "financas", "empresas", "mercados", "impostos",
                   "orcamento do estado", "banca", "imobiliario", "dinheiro", "salarios", "pensoes"]),
-    ("tecnologia", ["ciencia", "tecnologia", "inovacao", "inteligencia artificial", "espaco", "internet",
+    ("tecnologia", ["ciencia", "tecnologia", "inovacao", "inteligencia artificial", "espacial", "nasa", "internet",
                     "digital", "startups", "astronomia", "tech"]),
     ("portugal", ["pais", "mundo", "politica", "sociedade", "europa", "uniao europeia", "justica", "local", "nacional",
                   "internacional", "atualidade", "saude", "educacao", "habitacao", "ambiente", "africa", "america", "asia",

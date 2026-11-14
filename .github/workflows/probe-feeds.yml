@@ -1,0 +1,33 @@
+# Temporary: checks candidate news feeds. Will be deleted after use.
+name: Probe feeds
+on: { workflow_dispatch: {} }
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import sys, importlib.util, collections
+          spec = importlib.util.spec_from_file_location("c", "scripts/collect_news.py"); c = importlib.util.module_from_spec(spec); spec.loader.exec_module(c)
+          urls = [
+            "https://sicnoticias.pt/rss", "https://sicnoticias.pt/feed", "http://feeds.feedburner.com/sicnoticias-ultimas", "https://sicnoticias.pt/rss/ultimas",
+            "https://cnnportugal.iol.pt/rss", "https://cnnportugal.iol.pt/rss.xml", "https://cnnportugal.iol.pt/feed",
+            "https://www.tsf.pt/rss", "https://www.tsf.pt/rss/ultimas",
+            "https://tek.sapo.pt/rss", "https://tek.sapo.pt/feed", "http://rss.sapo.pt/tek/", "https://tek.sapo.pt/rss/ultimas",
+            "https://shifter.pt/feed/", "https://24.sapo.pt/rss", "https://www.cienciaviva.pt/rss",
+          ]
+          for u in urls:
+              try:
+                  es = c.fetch_entries(u)
+                  dates = sorted([e["date"] for e in es if e["date"]], reverse=True)
+                  cats = collections.Counter(x for e in es for x in e["categories"]).most_common(6)
+                  pay = sum(1 for e in es if c.PAYWALL_TEXT.search(e["raw"] or ""))
+                  print(f"OK   {u} items={len(es)} newest={dates[0] if dates else None} paywall_marks={pay}")
+                  for e in es[:3]: print(f"       - {e['title'][:90]} | {e['link'][:80]}")
+                  print(f"       cats={cats}")
+              except Exception as ex:
+                  print(f"FAIL {u} {str(ex)[:120]}")
+          PY

@@ -8,7 +8,9 @@ Usage: python3 scripts/collect_news.py out/news.json
 import html
 import json
 import re
+import os
 import sys
+import time
 import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -55,6 +57,8 @@ AUTO_RULES = [
 ]
 
 MAX_PER_SECTION = 40
+OG_PER_SECTION = 14   # look up missing pictures for this many stories per section…
+OG_BUDGET = 45        # …and at most this many article pages per run
 MAX_AGE = timedelta(hours=48)
 SKIP_LINK = re.compile(r"/(extras|opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
 # Paid articles of mostly free outlets: Observador's and ECO's subscriber sections, and items whose feed
@@ -115,12 +119,31 @@ def parse_date(s):
 IMG_EXT = re.compile(r"\.(jpe?g|png|webp|gif|avif)(\?|$)", re.I)
 
 
+BAD_IMG = re.compile(r"(pixel|tracker|feedburner\.com/~|gravatar|/emoji/|spacer|1x1|/default_|logo)", re.I)
+# Thumbnails too small to lead a section: a larger picture is looked up on the article page.
+SMALL_IMG = re.compile(r"img\.iol\.pt/image/id/[^/]+/\d{2,3}(\.\w+)?$|img_\d{2,3}x\d{2,3}", re.I)
+
+
+def clean_img(u):
+    u = html.unescape((u or "").strip())
+    if u.startswith("//"):
+        u = "https:" + u
+    if u.startswith("http://"):
+        u = "https://" + u[7:]  # the app is served over https; plain http images would be blocked
+    if not u.startswith("https://") or BAD_IMG.search(u):
+        return None
+    if "cdn-images.rtp.pt" in u:
+        u = re.sub(r"([?&])w=\d+", r"\g<1>w=800", u)  # RTP's feed asks for 350 px wide; same picture, larger
+    return u
+
+
 def find_image(node, raw):
     """The picture the outlet attached to the story in its feed (https only), or None."""
     found = []
     for c in node.iter():
         tag = local(c.tag)
         url = c.get("url") or c.get("href") or ""
+        text = (c.text or "").strip()
         if tag in ("content", "thumbnail") and url:  # media:content / media:thumbnail
             medium, typ = (c.get("medium") or ""), (c.get("type") or "")
             if medium == "image" or typ.startswith("image") or tag == "thumbnail" or IMG_EXT.search(url):
@@ -129,20 +152,45 @@ def find_image(node, raw):
             found.append(url)
         elif tag == "link" and c.get("rel") == "enclosure" and (c.get("type") or "").startswith("image") and url:
             found.append(url)
-        elif tag in ("image", "img") and (c.text or "").strip().startswith("http"):  # <image>url</image>
-            found.append(c.text.strip())
+        elif tag not in ("link", "guid", "comments", "description", "encoded", "summary") and text.startswith("http") \
+                and " " not in text and (tag in ("image", "img", "url") or IMG_EXT.search(text)):
+            found.append(text)  # <image>url</image>, <image><url>…</url></image>
     m = re.search(r"<img[^>]+src=[\"']([^\"']+)[\"']", html.unescape(raw or ""), re.I)
     if m:
         found.append(m.group(1))
     for u in found:
-        u = html.unescape(u.strip())
-        if u.startswith("//"):
-            u = "https:" + u
-        if u.startswith("http://"):
-            u = "https://" + u[7:]  # the app is served over https; plain http images would be blocked
-        if u.startswith("https://") and not re.search(r"(pixel|tracker|feedburner\.com/~|gravatar|/emoji/|spacer|1x1)", u, re.I):
+        u = clean_img(u)
+        if u:
             return u
     return None
+
+
+OG_RE = re.compile(
+    r"<meta[^>]+(?:property|name)=[\"'](?:og:image(?::secure_url)?|twitter:image)[\"'][^>]*?content=[\"']([^\"']+)[\"']"
+    r"|<meta[^>]+content=[\"']([^\"']+)[\"'][^>]*?(?:property|name)=[\"'](?:og:image(?::secure_url)?|twitter:image)[\"']", re.I)
+
+
+def og_image(link):
+    """The sharing picture (og:image) an article page declares, or '' if none / unreachable."""
+    try:
+        req = urllib.request.Request(link, headers={"User-Agent": UA, "Accept": "text/html"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            head = r.read(300_000).decode("utf-8", "ignore")
+        m = OG_RE.search(head)
+        return clean_img(m.group(1) or m.group(2)) or "" if m else ""
+    except Exception:
+        return ""
+
+
+def previous_og():
+    """Pictures already looked up in the last run, so each article page is only fetched once."""
+    repo = os.environ.get("GITHUB_REPOSITORY", "sandro91145/proximo")
+    try:
+        req = urllib.request.Request(f"https://raw.githubusercontent.com/{repo}/news-data/news.json", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r).get("og", {}) or {}
+    except Exception:
+        return {}
 
 
 def fetch_entries(url):
@@ -244,6 +292,32 @@ def main(out_path):
             clean.append(it)
         out["sections"][sec] = {"name": SECTIONS[sec], "items": clean[:MAX_PER_SECTION]}
         print(f"SECTION {sec}: {len(clean[:MAX_PER_SECTION])} items")
+
+    # Pictures for stories whose feed has none (or only a tiny thumbnail): read og:image from the article page.
+    # Only the first stories of each section, at most OG_BUDGET new pages per run, remembered between runs.
+    cache, og, budget = previous_og(), {}, OG_BUDGET
+    for sec in out["sections"].values():
+        for idx, it in enumerate(sec["items"]):
+            if it["image"] and not SMALL_IMG.search(it["image"]):
+                continue
+            link = it["link"]
+            if link in og:
+                found = og[link]
+            elif link in cache:
+                found = cache[link]
+            elif idx < OG_PER_SECTION and budget > 0:
+                budget -= 1
+                found = og_image(link)
+                time.sleep(0.3)
+            else:
+                continue
+            og[link] = found
+            if found:
+                it["image"] = found
+    out["og"] = og
+    print(f"PICTURES looked up: {OG_BUDGET - budget} new, {sum(1 for v in og.values() if v)} found of {len(og)} tried/remembered")
+    for key, sec in out["sections"].items():
+        print(f"IMAGES {key}: {sum(1 for i in sec['items'] if i['image'])}/{len(sec['items'])}")
 
     total = sum(len(s["items"]) for s in out["sections"].values())
     if total == 0:

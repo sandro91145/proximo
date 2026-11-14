@@ -12,14 +12,16 @@ const NEWS_STALE_H = 4;
 const REFRESH_MS = 15 * 60 * 1000;
 const HOME_PER_SECTION = 3;
 
+// accent: each section's colour (CSS variable names defined in styles.css, light + dark)
 const SECTIONS = [
-  { key: 'inicio', pt: 'Início', en: 'Home' },
-  { key: 'transportes', pt: 'Transportes', en: 'Transport' },
-  { key: 'portugal', pt: 'Portugal & Mundo', en: 'Portugal & World' },
-  { key: 'economia', pt: 'Economia & Trabalho', en: 'Economy & Work' },
-  { key: 'tecnologia', pt: 'Tecnologia & Ciência', en: 'Tech & Science' },
-  { key: 'desporto', pt: 'Desporto', en: 'Sport' },
+  { key: 'inicio', pt: 'Início', en: 'Home', accent: '--ink' },
+  { key: 'transportes', pt: 'Transportes', en: 'Transport', accent: '--sec-transportes' },
+  { key: 'portugal', pt: 'Portugal & Mundo', en: 'Portugal & World', accent: '--sec-portugal' },
+  { key: 'economia', pt: 'Economia & Trabalho', en: 'Economy & Work', accent: '--sec-economia' },
+  { key: 'tecnologia', pt: 'Tecnologia & Ciência', en: 'Tech & Science', accent: '--sec-tecnologia' },
+  { key: 'desporto', pt: 'Desporto', en: 'Sport', accent: '--sec-desporto' },
 ];
+const accentOf = k => `var(${(SECTIONS.find(x => x.key === k) || SECTIONS[0]).accent})`;
 const NEWS_KEYS = ['portugal', 'economia', 'tecnologia', 'desporto'];
 
 /* Transport operators: name, colour, official site (to confirm before travelling). */
@@ -190,6 +192,7 @@ function renderTabs() {
   const nav = $('#tabs');
   nav.replaceChildren(...SECTIONS.map(s => {
     const a = el('a', 'tab', s[state.lang]); a.href = '#' + s.key;
+    a.style.setProperty('--acc', accentOf(s.key));
     if (s.key === cur) a.setAttribute('aria-current', 'page');
     if (s.key === 'transportes' && strikeItems().some(x => x.s <= nowS())) a.append(el('span', 'tab-dot'));
     return a;
@@ -233,6 +236,7 @@ function render() {
   renderTabs();
   const key = current();
   const view = $('#view');
+  view.style.setProperty('--acc', accentOf(key));
   if (key === 'inicio') view.replaceChildren(...homeView());
   else if (key === 'transportes') view.replaceChildren(...transportView());
   else view.replaceChildren(...newsView(key));
@@ -241,62 +245,127 @@ function render() {
 
 function homeView() {
   const parts = [];
+  parts.push(el('p', 'date-line', cap(new Intl.DateTimeFormat(locale(), { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()))));
+
   // Transport status: the one urgent thing, if any.
   const st = strikeStatus();
   const tr = el('a', 'status ' + st.tone); tr.href = '#transportes';
-  tr.append(el('span', 'status-kicker', t('transportKicker')), el('span', 'status-title', state.strikes.error && !state.strikes.data ? t('loadError') : st.title));
-  if (st.sub) tr.append(el('span', 'status-sub', st.sub));
-  parts.push(el('p', 'date-line', cap(new Intl.DateTimeFormat(locale(), { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()))));
+  const ico = el('span', 'status-icon'); ico.innerHTML = TRANSPORT_ICON;
+  const txt = el('span', 'status-text');
+  txt.append(el('span', 'status-kicker', t('transportKicker')), el('span', 'status-title', state.strikes.error && !state.strikes.data ? t('loadError') : st.title));
+  if (st.sub) txt.append(el('span', 'status-sub', st.sub));
+  tr.append(ico, txt, el('span', 'status-go', '›'));
   parts.push(tr);
 
   const fr = freshness(state.news, NEWS_STALE_H, 'newsChecked', 'newsStale');
   if (fr.warn) parts.push(note(fr.warn));
-  if (!state.news.data) parts.push(note(state.news.error ? `${t('loadError')} ${t('loadErrorSub')}` : t('loading'), 'muted-note'));
+  if (!state.news.data) {
+    if (state.news.error) parts.push(note(`${t('loadError')} ${t('loadErrorSub')}`, 'muted-note'));
+    else parts.push(skeleton(true), skeleton(), skeleton());
+    parts.push(foot([t('newsAbout')]));
+    return parts;
+  }
 
+  // Lead story: the newest story with a picture from Portugal & Mundo (or any section).
+  const used = new Set();
+  const lead = newsItems('portugal').find(i => i.image) || NEWS_KEYS.map(k => newsItems(k).find(i => i.image)).find(Boolean);
+  if (lead) { used.add(lead.link); parts.push(storyCard(lead, 'lead', 'portugal')); }
+
+  const grid = el('div', 'home-grid');
   NEWS_KEYS.forEach(k => {
-    const items = newsItems(k);
+    const items = newsItems(k).filter(i => !used.has(i.link));
     if (!items.length) return;
     const sec = el('section', 'home-sec');
+    sec.style.setProperty('--acc', accentOf(k));
     const head = el('div', 'home-head');
     const h = el('h2', null, secName(k));
     const more = el('a', 'see-all', t('seeAll')); more.href = '#' + k;
     head.append(h, more);
-    const ul = el('ul', 'headlines');
-    items.slice(0, HOME_PER_SECTION).forEach((it, i) => ul.append(headline(it, i === 0)));
-    sec.append(head, ul);
-    parts.push(sec);
+    sec.append(head);
+    const first = items.find(i => i.image) || items[0];
+    sec.append(storyCard(first, 'feature', k));
+    const ul = el('ul', 'rows');
+    items.filter(i => i !== first).slice(0, HOME_PER_SECTION).forEach(it => ul.append(storyRow(it)));
+    sec.append(ul);
+    grid.append(sec);
   });
+  parts.push(grid);
   parts.push(foot([fr.checked, t('newsAbout')]));
   return parts;
 }
 
 function newsView(key) {
-  const parts = [el('h1', 'sec-title', secName(key))];
+  const parts = [];
+  const title = el('h1', 'sec-title', secName(key));
+  parts.push(title);
   const fr = freshness(state.news, NEWS_STALE_H, 'newsChecked', 'newsStale');
   if (fr.warn) parts.push(note(fr.warn));
   const items = newsItems(key);
-  if (!state.news.data) parts.push(note(state.news.error ? `${t('loadError')} ${t('loadErrorSub')}` : t('loading'), 'muted-note'));
-  else if (!items.length) parts.push(note(t('emptySection'), 'muted-note'));
+  if (!state.news.data) {
+    if (state.news.error) parts.push(note(`${t('loadError')} ${t('loadErrorSub')}`, 'muted-note'));
+    else parts.push(skeleton(true), skeleton(), skeleton(), skeleton());
+  } else if (!items.length) parts.push(note(t('emptySection'), 'muted-note'));
   else {
-    const ul = el('ul', 'headlines full');
-    items.forEach(it => ul.append(headline(it, false, true)));
+    const first = items.find(i => i.image) || items[0];
+    parts.push(storyCard(first, 'lead', key));
+    const ul = el('ul', 'rows full');
+    items.filter(i => i !== first).forEach(it => ul.append(storyRow(it, true)));
     parts.push(ul);
   }
   parts.push(foot([fr.checked, t('newsAbout')]));
   return parts;
 }
 
-function headline(it, lead, withSummary = false) {
-  const li = el('li', 'hl' + (lead ? ' lead' : ''));
-  const a = el('a'); a.href = it.link; a.target = '_blank'; a.rel = 'noopener';
-  const meta = el('span', 'hl-meta');
-  meta.append(el('span', 'hl-source', it.source));
-  if (it.time) meta.append(el('span', 'hl-time', ago(Date.parse(it.time) / 1000)));
-  a.append(meta, el('span', 'hl-title', it.title));
-  if ((withSummary || lead) && it.summary) a.append(el('span', 'hl-sum', it.summary));
+/* A picture from the outlet's feed or article page; hidden again if it fails to load. */
+function picture(src, cls) {
+  const f = el('span', 'pic ' + cls);
+  const img = document.createElement('img');
+  img.src = src; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', () => { f.closest('.has-pic')?.classList.replace('has-pic', 'no-pic'); f.remove(); });
+  img.addEventListener('load', () => f.classList.add('loaded'));
+  f.append(img);
+  return f;
+}
+function meta(it) {
+  const m = el('span', 'meta');
+  m.append(el('span', 'source', it.source));
+  if (it.time) m.append(el('span', 'time', ago(Date.parse(it.time) / 1000)));
+  return m;
+}
+function link(it, cls) {
+  const a = el('a', cls); a.href = it.link; a.target = '_blank'; a.rel = 'noopener';
+  return a;
+}
+// Big story with picture: 'lead' (top of a page) or 'feature' (lead of a home section).
+function storyCard(it, size, secKey) {
+  const a = link(it, `story ${size} ${it.image ? 'has-pic' : 'no-pic'}`);
+  a.style.setProperty('--acc', accentOf(secKey));
+  if (it.image) a.append(picture(it.image, 'wide'));
+  const body = el('span', 'story-body');
+  body.append(meta(it), el('span', 'story-title', it.title));
+  if (it.summary && size === 'lead') body.append(el('span', 'story-sum', it.summary));
+  a.append(body);
+  return a;
+}
+// Compact row: title on the left, small picture on the right when there is one.
+function storyRow(it, withSummary = false) {
+  const li = el('li');
+  const a = link(it, `row ${it.image ? 'has-pic' : 'no-pic'}`);
+  const body = el('span', 'row-body');
+  body.append(meta(it), el('span', 'row-title', it.title));
+  if (withSummary && it.summary) body.append(el('span', 'row-sum', it.summary));
+  a.append(body);
+  if (it.image) a.append(picture(it.image, 'thumb'));
   li.append(a);
   return li;
 }
+function skeleton(big = false) {
+  const s = el('div', 'skel' + (big ? ' big' : ''));
+  if (big) s.append(el('span', 'skel-pic'));
+  s.append(el('span', 'skel-line short'), el('span', 'skel-line'), el('span', 'skel-line mid'));
+  return s;
+}
+const TRANSPORT_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="3.5" width="14" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 10.5h14M8 17.5 6.5 20.5M16 17.5l1.5 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="1.2" fill="currentColor"/><circle cx="15" cy="14" r="1.2" fill="currentColor"/></svg>';
 
 function transportView() {
   const parts = [];

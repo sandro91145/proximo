@@ -19,7 +19,9 @@ ECO, O Jornal Económico, SAPO Tek, Pplware and Record: only outlets that can be
 removed for their paywalls). Subscriber-only articles of Observador and ECO are filtered out. General feeds are sorted into sections by each story's
 own category labels or link. Duplicates across outlets are merged; opinion pieces, radio programmes, live blogs,
 quizzes and shopping deals are skipped; stories older than 48 hours are dropped. Only the headline, a short excerpt,
-the source, the time and the link are kept.
+the source, the time, the link and the picture the outlet provides for sharing are kept.
+When a feed has no picture for a top story, the article page's sharing image (og:image) is looked up,
+at most 45 pages per run and each page only once.
 
 `.github/workflows/news.yml` runs it every hour and publishes `news.json` to the `news-data` branch (a single commit,
 replaced each time). The app reads it from `raw.githubusercontent.com`. No secrets or Claude usage needed.

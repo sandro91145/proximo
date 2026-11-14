@@ -22,15 +22,13 @@ SECTIONS = {
     "desporto": "Desporto",
 }
 
+# Only outlets that can be read without paying. Removed for paywalls: Expresso, Público, Jornal de Negócios.
 # (source name, feed URL, section). "auto" sorts each story by its own category labels / link path,
 # and skips stories that fit none of the sections (culture, lifestyle, radio shows…).
 FEEDS = [
     ("RTP Notícias", "https://www.rtp.pt/noticias/rss", "auto"),
     ("Observador", "https://observador.pt/feed/", "auto"),
-    ("Expresso", "https://feeds.feedburner.com/expresso-geral", "auto"),
-    ("Público", "https://feeds.feedburner.com/PublicoRSS", "auto"),
     ("ECO", "https://eco.sapo.pt/feed/", "economia"),
-    ("Jornal de Negócios", "https://www.jornaldenegocios.pt/rss", "economia"),
     ("O Jornal Económico", "https://jornaleconomico.sapo.pt/feed", "economia"),
     ("Pplware", "https://pplware.sapo.pt/feed/", "tecnologia"),
     ("Record", "https://www.record.pt/rss", "desporto"),
@@ -51,6 +49,10 @@ AUTO_RULES = [
 MAX_PER_SECTION = 40
 MAX_AGE = timedelta(hours=48)
 SKIP_LINK = re.compile(r"/(opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
+# Paid articles of mostly free outlets: Observador's and ECO's subscriber sections, and items whose feed
+# content says they're for subscribers only (ECO marks these).
+PAYWALL_LINK = re.compile(r"(observador\.pt|eco\.sapo\.pt)/(especiais|explicadores|fact-check|factcheck)/", re.I)
+PAYWALL_TEXT = re.compile(r"exclusiv[oa] (para|a) assinantes|exclusivo assinantes|premium-paywall|s[oó] para assinantes", re.I)
 # Shopping deals and sponsored posts aren't news.
 SKIP_TITLE = re.compile(r"\bquiz\b|black friday|cyber monday|cup[aã]o|c[oó]digo promocional|desconto|promo[cç][aã]o|aproveite|oferta especial|patrocinad", re.I)
 # Boilerplate some feeds put at the start of the excerpt.
@@ -121,7 +123,9 @@ def fetch_entries(url):
         for c in node:
             if local(c.tag) == "category":
                 cats.append((c.text or c.get("term") or "").strip())
+        raw = " ".join((c.text or "") for c in node if local(c.tag) in ("description", "summary", "encoded", "content"))
         entries.append({
+            "raw": raw,
             "title": child_text(node, "title"),
             "link": link,
             "summary": child_text(node, "description", "summary", "encoded", "content"),
@@ -157,6 +161,8 @@ def main(out_path):
             link = (en["link"] or "").strip()
             title = plain(en["title"])
             if not link.startswith("http") or not title or SKIP_LINK.search(link) or SKIP_TITLE.search(title):
+                continue
+            if PAYWALL_LINK.search(link) or PAYWALL_TEXT.search(en["raw"]) or PAYWALL_TEXT.search(title):
                 continue
             sec = auto_section(en) if section == "auto" else section
             if sec not in items:

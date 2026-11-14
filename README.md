@@ -14,8 +14,9 @@ section; each section shows its latest headlines with source, time and a short e
 
 ### News
 
-`scripts/collect_news.py` reads the public RSS feeds of RTP Notícias, Observador, Expresso, Público, ECO,
-Jornal de Negócios, O Jornal Económico, Pplware and Record. General feeds are sorted into sections by each story's
+`scripts/collect_news.py` reads the public RSS feeds of RTP Notícias, Observador, ECO, O Jornal Económico,
+Pplware and Record: only outlets that can be read without paying (Expresso, Público and Jornal de Negócios were
+removed for their paywalls). Subscriber-only articles of Observador and ECO are filtered out. General feeds are sorted into sections by each story's
 own category labels or link. Duplicates across outlets are merged; opinion pieces, radio programmes, live blogs,
 quizzes and shopping deals are skipped; stories older than 48 hours are dropped. Only the headline, a short excerpt,
 the source, the time and the link are kept.

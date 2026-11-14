@@ -112,6 +112,39 @@ def parse_date(s):
     return d.astimezone(timezone.utc)
 
 
+IMG_EXT = re.compile(r"\.(jpe?g|png|webp|gif|avif)(\?|$)", re.I)
+
+
+def find_image(node, raw):
+    """The picture the outlet attached to the story in its feed (https only), or None."""
+    found = []
+    for c in node.iter():
+        tag = local(c.tag)
+        url = c.get("url") or c.get("href") or ""
+        if tag in ("content", "thumbnail") and url:  # media:content / media:thumbnail
+            medium, typ = (c.get("medium") or ""), (c.get("type") or "")
+            if medium == "image" or typ.startswith("image") or tag == "thumbnail" or IMG_EXT.search(url):
+                found.append(url)
+        elif tag == "enclosure" and url and ((c.get("type") or "").startswith("image") or IMG_EXT.search(url)):
+            found.append(url)
+        elif tag == "link" and c.get("rel") == "enclosure" and (c.get("type") or "").startswith("image") and url:
+            found.append(url)
+        elif tag in ("image", "img") and (c.text or "").strip().startswith("http"):  # <image>url</image>
+            found.append(c.text.strip())
+    m = re.search(r"<img[^>]+src=[\"']([^\"']+)[\"']", html.unescape(raw or ""), re.I)
+    if m:
+        found.append(m.group(1))
+    for u in found:
+        u = html.unescape(u.strip())
+        if u.startswith("//"):
+            u = "https:" + u
+        if u.startswith("http://"):
+            u = "https://" + u[7:]  # the app is served over https; plain http images would be blocked
+        if u.startswith("https://") and not re.search(r"(pixel|tracker|feedburner\.com/~|gravatar|/emoji/|spacer|1x1)", u, re.I):
+            return u
+    return None
+
+
 def fetch_entries(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8"})
     with urllib.request.urlopen(req, timeout=20) as r:
@@ -139,6 +172,7 @@ def fetch_entries(url):
             "summary": child_text(node, "description", "summary", "encoded", "content"),
             "date": parse_date(child_text(node, "pubDate", "published", "updated", "date")),
             "categories": cats,
+            "image": find_image(node, raw),
         })
     return entries
 
@@ -189,10 +223,12 @@ def main(out_path):
                 "source": source,
                 "time": ts.replace(microsecond=0).isoformat().replace("+00:00", "Z") if ts else None,
                 "summary": plain(JUNK_SUMMARY.sub("", plain(en["summary"])), 220),
+                "image": en["image"],
             })
             kept += 1
-        report.append({"source": source, "url": url, "ok": True, "entries": len(entries), "kept": kept})
-        print(f"OK    {source:20} {url}  entries={len(entries)} kept={kept}")
+        with_img = sum(1 for en in entries if en["image"])
+        report.append({"source": source, "url": url, "ok": True, "entries": len(entries), "kept": kept, "with_image": with_img})
+        print(f"OK    {source:20} {url}  entries={len(entries)} kept={kept} images={with_img}")
 
     out = {"updated": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"), "sections": {}, "feeds": report}
     for sec, lst in items.items():

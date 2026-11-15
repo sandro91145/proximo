@@ -1,0 +1,14 @@
+# Temporary: checks whether IPMA allows browsers to read its data (CORS). Will be deleted after use.
+name: Probe feeds
+on: { workflow_dispatch: {} }
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          for u in https://api.ipma.pt/public-data/forecast/aggregate/1150300.json https://api.ipma.pt/open-data/forecast/meteorology/cities/daily/1150300.json https://api.ipma.pt/public-data/forecast/locations.json "https://api.open-meteo.com/v1/forecast?latitude=38.66&longitude=-9.16&current=temperature_2m"; do
+            echo "== $u"; curl -s -D - -o /tmp/b -H "Origin: https://sandro91145.github.io" "$u" | grep -iE "^(HTTP|access-control|content-length|content-type)" | sed 's/^/HDR /'; echo "SIZE $(wc -c < /tmp/b)"
+          done
+          curl -s https://api.ipma.pt/public-data/forecast/locations.json | python3 -c "import json,sys;d=json.load(sys.stdin);print('LOCS',len(d));print('LOCS ex',d[:2])"

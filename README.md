@@ -30,10 +30,14 @@ in Lisbon or the Margem Sul (sport and phrases like "Bolsa de Lisboa" excluded).
 
 ### Weather
 
-The same script reads IPMA's open data (no key): the hourly and daily forecast for Lisboa and Almada and the active
-yellow, orange or red warnings for the Lisboa and Setúbal districts (Almada is in the Setúbal district). The home page
-shows the current hour, today's high/low and rain chance, the next 12 hours, the next 5 days and any warning, with a
-Lisboa / Almada switch that the app remembers. If IPMA can't be reached, the previous forecast is kept.
+The same script reads IPMA's open data (no key): the hourly and daily forecast for Lisboa and Almada and every active
+yellow, orange or red warning in Portugal. The home page shows the current hour, today's high/low and rain chance,
+the next 12 hours, the next 5 days and the warnings for the place's district (Almada is in the Setúbal district).
+
+Places: **+** on the weather card opens a search over IPMA's 423 forecast locations (every municipality, plus a few
+neighbourhoods and the islands) and a *Use my location* button that picks the nearest one. Up to 5 places are kept
+on the device as quick buttons, each removable. The app reads the chosen place's forecast straight from IPMA (it allows
+browsers to) and keeps the last one for offline use; for Lisboa and Almada it falls back to the copy in news.json.
 
 `.github/workflows/news.yml` runs it every hour and publishes `news.json` to the `news-data` branch (a single commit,
 replaced each time). The app reads it from `raw.githubusercontent.com`. No secrets or Claude usage needed.

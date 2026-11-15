@@ -64,7 +64,10 @@ const TEXT = {
     wxSource: 'Previsão IPMA', wxNone: 'Previsão do tempo indisponível de momento.',
     wxLevel: { yellow: 'Aviso amarelo', orange: 'Aviso laranja', red: 'Aviso vermelho' },
     wxArea: a => `distrito de ${a}`, wxFrom: x => `a partir de ${x}`,
-    wxPlaces: 'Escolher local da previsão',
+    wxPlaces: 'Escolher local da previsão', wxOther: 'Outro local', wxClose: 'Fechar',
+    wxSearch: 'Procurar localidade (ex.: Seixal, Porto…)', wxMyLoc: 'Usar a minha localização', wxNoMatch: 'Nenhuma localidade encontrada.',
+    wxGeoWait: 'A obter a tua localização…', wxGeoNo: 'Não foi possível obter a localização. Procura pelo nome.',
+    wxListErr: 'Não foi possível carregar a lista de localidades.', wxSaved: 'Os teus locais (até 5):', wxRemove: x => `Remover ${x}`,
   },
   en: {
     refresh: 'Refresh', sourceCode: 'Source code and contact on GitHub', seeAll: 'See all', loading: 'Loading…',
@@ -91,7 +94,10 @@ const TEXT = {
     wxSource: 'IPMA forecast', wxNone: 'Weather forecast unavailable right now.',
     wxLevel: { yellow: 'Yellow warning', orange: 'Orange warning', red: 'Red warning' },
     wxArea: a => `${a} district`, wxFrom: x => `from ${x}`,
-    wxPlaces: 'Choose forecast place',
+    wxPlaces: 'Choose forecast place', wxOther: 'Other place', wxClose: 'Close',
+    wxSearch: 'Search a town (e.g. Seixal, Porto…)', wxMyLoc: 'Use my location', wxNoMatch: 'No place found.',
+    wxGeoWait: 'Getting your location…', wxGeoNo: 'Couldn’t get your location. Search by name instead.',
+    wxListErr: 'Couldn’t load the list of places.', wxSaved: 'Your places (up to 5):', wxRemove: x => `Remove ${x}`,
   },
 };
 
@@ -105,7 +111,6 @@ const store = {
 
 const state = {
   lang: store.get('px_lang', (navigator.language || 'pt').toLowerCase().startsWith('pt') ? 'pt' : 'en'),
-  wxPlace: store.get('px_wx_place', 'lisboa'),
   strikes: { data: store.get('px_disruptions', null), offline: false, error: false },
   news: { data: store.get('px_news', null), offline: false, error: false },
   loading: false,
@@ -178,6 +183,7 @@ async function load() {
     fetchJson(NEWS_URL, state.news, 'px_news', j => j && typeof j.sections === 'object'),
   ]);
   state.loading = false; $('#refreshBtn').classList.remove('spin');
+  if (current() === 'inicio') fetchPlace(wx.sel);
   render();
 }
 
@@ -246,6 +252,7 @@ function freshness(slot, staleH, checkedKey, staleKey) {
 
 /* ---------- Render: views ---------- */
 function render() {
+  if (document.activeElement?.id === 'wxSearch' && wx.picker) return;  // don't rebuild while typing a place name
   renderTabs();
   const key = current();
   const view = $('#view');
@@ -423,38 +430,186 @@ const warnType = x => state.lang === 'en' ? (WARN_EN[x] || x) : x;
 const temp = v => v == null ? '–' : `${v}°`;
 const lisbonDate = ts => dayKey(ts);
 
+/* Places: any of IPMA's 423 forecast locations. Lisboa and Almada come with news.json;
+ * the app reads the chosen place's forecast straight from IPMA (it allows browsers to). */
+const IPMA = 'https://api.ipma.pt/public-data/forecast';
+const WX_DEFAULT = [{ id: 1110600, name: 'Lisboa', area: 'LSB' }, { id: 1150300, name: 'Almada', area: 'STB' }];
+const WX_MAX_PLACES = 5;
+const AREA_NAMES = { AVR: 'Aveiro', BJA: 'Beja', BRG: 'Braga', BGC: 'Bragança', CBO: 'Castelo Branco', CBR: 'Coimbra', EVR: 'Évora',
+  FAR: 'Faro', GDA: 'Guarda', LRA: 'Leiria', LSB: 'Lisboa', PTG: 'Portalegre', PTO: 'Porto', STM: 'Santarém', STB: 'Setúbal',
+  VCT: 'Viana do Castelo', VRL: 'Vila Real', VIS: 'Viseu', MCN: 'Madeira', MCS: 'Madeira', MRM: 'Madeira', MPS: 'Porto Santo',
+  AOR: 'Açores', ACE: 'Açores', AOC: 'Açores' };
+const fold = x => (x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const wx = {
+  places: (() => { const p = store.get('px_wx_places', null); return Array.isArray(p) && p.length ? p : WX_DEFAULT.slice(); })(),
+  sel: (() => { const v = store.get('px_wx_place', 1110600); return v === 'almada' ? 1150300 : v === 'lisboa' ? 1110600 : v; })(),
+  live: {},            // id -> { at, days, hours }
+  busy: {}, failed: {},   // id -> time of the last failed fetch (wait 5 min before retrying)
+  locs: store.get('px_wx_locs', null),   // IPMA location list, cached
+  picker: false, q: '', geo: '',
+};
+WX_DEFAULT.concat(wx.places).forEach(p => { const c = store.get('px_wx_' + p.id, null); if (c) wx.live[p.id] = c; });
+const saveWx = () => { store.set('px_wx_places', wx.places); store.set('px_wx_place', wx.sel); };
+
+function parseAggregate(rows, now = nowS()) {
+  const n = v => { const f = parseFloat(v); return Number.isFinite(f) && f > -99 ? Math.round(f) : null; };
+  const days = [], hours = [];
+  const iso = s => s && !/[zZ]|[+-]\d\d:\d\d$/.test(s) ? lisbonToUtc(s) : Date.parse(s) / 1000;
+  rows.forEach(r => {
+    if (r.idPeriodo === 24) days.push({ date: (r.dataPrev || '').slice(0, 10), min: n(r.tMin), max: n(r.tMax), type: n(r.idTipoTempo), rain: n(r.probabilidadePrecipita) });
+    else if (r.idPeriodo === 1) {
+      const ts = iso(r.dataPrev);
+      if (ts && ts >= now - 3600) hours.push({ t: new Date(ts * 1000).toISOString(), temp: n(r.tMed), feels: n(r.utci), type: n(r.idTipoTempo), rain: n(r.probabilidadePrecipita), wind: n(r.ffVento) });
+    }
+  });
+  days.sort((x, y) => x.date.localeCompare(y.date)); hours.sort((x, y) => x.t.localeCompare(y.t));
+  return { days: days.slice(0, 7), hours: hours.slice(0, 36) };
+}
+// IPMA writes times in Lisbon local time without an offset.
+function lisbonToUtc(s) {
+  const guess = Date.parse(s + 'Z') / 1000;
+  if (!guess) return null;
+  const local = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .format(new Date(guess * 1000)).replace(', ', 'T');
+  return guess - (Date.parse(local + ':00Z') / 1000 - guess);
+}
+async function fetchPlace(id, force = false) {
+  const cur = wx.live[id];
+  if (wx.busy[id] || (!force && cur && nowS() - cur.at < 30 * 60) || (!force && nowS() - (wx.failed[id] || 0) < 300)) return;
+  wx.busy[id] = true;
+  try {
+    const r = await fetch(`${IPMA}/aggregate/${id}.json`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const parsed = parseAggregate(await r.json());
+    if (!parsed.days.length) throw new Error('empty');
+    wx.live[id] = { at: nowS(), ...parsed };
+    store.set('px_wx_' + id, wx.live[id]);
+  } catch { wx.failed[id] = nowS(); /* keep what we have */ }
+  wx.busy[id] = false;
+  if (current() === 'inicio') render();
+}
+async function loadLocations() {
+  if (wx.locs) return wx.locs;
+  try {
+    const r = await fetch(`${IPMA}/locations.json`);
+    const j = await r.json();
+    wx.locs = j.filter(x => x.globalIdLocal && x.local).map(x => ({ id: x.globalIdLocal, name: x.local, area: x.idAreaAviso, lat: +x.latitude, lon: +x.longitude }));
+    store.set('px_wx_locs', wx.locs);
+  } catch { wx.locs = null; }
+  return wx.locs;
+}
+// The forecast to show for a place: fetched live, else the copy in news.json.
+function placeForecast(p) {
+  const live = wx.live[p.id];
+  const fromNews = Object.values(state.news.data?.weather?.places || {}).find(x => x.id === p.id || (!x.id && x.name === p.name));
+  if (live && (!fromNews || live.at >= Date.parse(state.news.data?.weather?.updated || 0) / 1000)) return live;
+  return fromNews || live || null;
+}
+function addPlace(loc) {
+  if (!wx.places.some(p => p.id === loc.id)) {
+    wx.places.push({ id: loc.id, name: loc.name, area: loc.area });
+    if (wx.places.length > WX_MAX_PLACES) wx.places.splice(0, wx.places.length - WX_MAX_PLACES);
+  }
+  wx.sel = loc.id; wx.picker = false; wx.q = ''; wx.geo = '';
+  saveWx(); fetchPlace(loc.id); render();
+}
+function removePlace(id) {
+  wx.places = wx.places.filter(p => p.id !== id);
+  if (!wx.places.length) wx.places = WX_DEFAULT.slice();
+  if (!wx.places.some(p => p.id === wx.sel)) wx.sel = wx.places[0].id;
+  saveWx(); render();
+}
+function useMyLocation() {
+  if (!navigator.geolocation) { wx.geo = t('wxGeoNo'); render(); return; }
+  wx.geo = t('wxGeoWait'); render();
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const locs = await loadLocations();
+    if (!locs) { wx.geo = t('wxListErr'); render(); return; }
+    const { latitude: la, longitude: lo } = pos.coords, k = Math.cos(la * Math.PI / 180);
+    const best = locs.reduce((b, x) => { const d = (x.lat - la) ** 2 + ((x.lon - lo) * k) ** 2; return !b || d < b.d ? { x, d } : b; }, null);
+    if (best) addPlace(best.x);
+  }, () => { wx.geo = t('wxGeoNo'); render(); }, { timeout: 15000, maximumAge: 30 * 60 * 1000 });
+}
+
 // Short facts separated by dots (the separator is drawn by CSS so the spacing is even).
 function dots(cls, list) {
   const s = el('span', cls + ' dots');
   list.filter(Boolean).forEach(x => s.append(el('span', null, x)));
   return s;
 }
+function weatherPicker() {
+  const box = el('div', 'wx-picker');
+  const input = el('input', 'wx-search'); input.id = 'wxSearch'; input.type = 'search'; input.value = wx.q;
+  input.placeholder = t('wxSearch'); input.setAttribute('aria-label', t('wxSearch')); input.autocomplete = 'off';
+  const list = el('ul', 'wx-results');
+  const fill = () => {
+    const q = fold(wx.q.trim());
+    list.replaceChildren();
+    if (!wx.locs) { list.append(el('li', 'wx-hint', t('loading'))); return; }
+    if (!q) return;
+    const hits = wx.locs.filter(x => fold(x.name).includes(q))
+      .sort((a, b) => (fold(b.name).startsWith(q) - fold(a.name).startsWith(q)) || a.name.localeCompare(b.name, 'pt')).slice(0, 8);
+    if (!hits.length) list.append(el('li', 'wx-hint', t('wxNoMatch')));
+    hits.forEach(x => {
+      const li = el('li'); const b = el('button', 'wx-hit'); b.type = 'button';
+      b.append(el('span', null, x.name), el('span', 'wx-hit-area', AREA_NAMES[x.area] || ''));
+      b.addEventListener('click', () => addPlace(x));
+      li.append(b); list.append(li);
+    });
+  };
+  input.addEventListener('input', () => { wx.q = input.value; fill(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') list.querySelector('button')?.click(); if (e.key === 'Escape') { wx.picker = false; render(); } });
+  const geo = el('button', 'wx-geo', t('wxMyLoc')); geo.type = 'button'; geo.addEventListener('click', useMyLocation);
+  box.append(input, geo);
+  if (wx.geo) box.append(el('p', 'wx-hint', wx.geo));
+  box.append(list);
+  // Saved places, with a remove button each
+  const saved = el('ul', 'wx-saved');
+  wx.places.forEach(p => {
+    const li = el('li'); li.append(el('span', null, p.name));
+    const x = el('button', 'wx-del', '×'); x.type = 'button'; x.title = t('wxRemove', p.name); x.setAttribute('aria-label', x.title);
+    x.addEventListener('click', () => removePlace(p.id));
+    li.append(x); saved.append(li);
+  });
+  box.append(el('p', 'wx-hint', t('wxSaved')), saved);
+  if (!wx.locs) loadLocations().then(fill); else fill();
+  setTimeout(() => { if (wx.picker && document.activeElement !== input && !wx.geo) input.focus({ preventScroll: true }); }, 0);
+  return box;
+}
+
 function weatherCard() {
-  const w = state.news.data?.weather;
-  if (!state.news.data) return null;
-  const card = el('section', 'wx');
-  const places = w?.places || {};
-  const keys = Object.keys(places);
-  if (!keys.length) { card.append(el('p', 'wx-none', t('wxNone'))); return card; }
-  const key = places[state.wxPlace] ? state.wxPlace : keys[0];
-  const p = places[key];
+  if (!state.news.data && !Object.keys(wx.live).length) return null;
+  const w = state.news.data?.weather || {};
+  const card = el('section', 'wx' + (wx.picker ? ' picking' : ''));
+  const place = wx.places.find(p => p.id === wx.sel) || wx.places[0];
+  const p = placeForecast(place);
+  if (!wx.live[place.id] || nowS() - wx.live[place.id].at > 30 * 60) fetchPlace(place.id);
   const now = nowS();
 
-  // Place switch + source
+  // Place switch, + to choose another place, source
   const head = el('div', 'wx-head');
   const sw = el('div', 'wx-switch'); sw.setAttribute('role', 'group'); sw.setAttribute('aria-label', t('wxPlaces'));
-  keys.forEach(k => {
-    const b = el('button', 'wx-place', places[k].name); b.type = 'button';
-    b.setAttribute('aria-pressed', String(k === key));
-    b.addEventListener('click', () => { state.wxPlace = k; store.set('px_wx_place', k); render(); });
+  wx.places.forEach(pl => {
+    const b = el('button', 'wx-place', pl.name); b.type = 'button';
+    b.setAttribute('aria-pressed', String(pl.id === place.id && !wx.picker));
+    b.addEventListener('click', () => { wx.sel = pl.id; wx.picker = false; saveWx(); render(); });
     sw.append(b);
   });
+  const add = el('button', 'wx-place wx-add', wx.picker ? '×' : '+'); add.type = 'button';
+  add.title = wx.picker ? t('wxClose') : t('wxOther'); add.setAttribute('aria-label', add.title);
+  add.setAttribute('aria-expanded', String(wx.picker));
+  add.addEventListener('click', () => { wx.picker = !wx.picker; wx.q = ''; wx.geo = ''; render(); });
+  sw.append(add);
   const src = el('a', 'wx-src', t('wxSource'));
   src.href = 'https://www.ipma.pt/pt/otempo/prev.localidade.hora/'; src.target = '_blank'; src.rel = 'noopener';
-  head.append(sw, src);
-  // main: place, now, warnings · fore: next hours and days (side by side on wide screens)
+  head.append(sw);
   const main = el('div', 'wx-main'), fore = el('div', 'wx-fore');
   main.append(head);
+  if (wx.picker) { main.append(weatherPicker(), src); card.append(main); return card; }
+  if (!p) {
+    main.append(el('p', 'wx-none', wx.busy[place.id] ? t('loading') : t('wxNone')), src);
+    card.append(main); return card;
+  }
 
   // Now: the hourly forecast for the current hour; today's high / low / rain.
   const hours = (p.hours || []).map(h => ({ ...h, ts: Date.parse(h.t) / 1000 })).filter(h => h.ts);
@@ -477,15 +632,15 @@ function weatherCard() {
   nowRow.append(ico, big, info);
   main.append(nowRow);
 
-  // IPMA warnings for this place's district (Almada is in the Setúbal district).
-  const area = p.area === 'STB' ? 'Setúbal' : 'Lisboa';
+  // IPMA warnings for this place's warning area (e.g. Almada is in the Setúbal district).
   (w.warnings || [])
-    .filter(x => x.area === area && Date.parse(x.end) / 1000 > now)
+    .filter(x => (x.code ? x.code === place.area : x.area === AREA_NAMES[place.area]) && Date.parse(x.end) / 1000 > now)
     .forEach(x => {
       const s = Date.parse(x.start) / 1000, e = Date.parse(x.end) / 1000;
       const when = s > now ? t('wxFrom', `${lc(dayLabel(s))} ${clock(s)}`) : t('until', (dayKey(e) === dayKey(now) ? '' : lc(dayLabel(e)) + ' ') + clock(e));
       const box = el('p', 'wx-warn ' + x.level);
-      box.append(el('strong', null, `${t('wxLevel')[x.level] || ''}: ${warnType(x.type)}`), dots('wx-warn-when', [t('wxArea', x.area), when]));
+      const areaTxt = /^[A-Z]{3}$/.test(place.area) && !['MCN', 'MCS', 'MRM', 'MPS', 'AOR', 'ACE', 'AOC'].includes(place.area) ? t('wxArea', x.area) : x.area;
+      box.append(el('strong', null, `${t('wxLevel')[x.level] || ''}: ${warnType(x.type)}`), dots('wx-warn-when', [areaTxt, when]));
       if (x.text) box.append(el('span', 'wx-warn-text', x.text));
       main.append(box);
     });
@@ -525,6 +680,7 @@ function weatherCard() {
     });
     fore.append(ul);
   }
+  (fore.childNodes.length ? fore : main).append(src);
   card.append(main);
   if (fore.childNodes.length) card.append(fore);
   return card;
@@ -584,11 +740,12 @@ function card(x, isNow) {
 }
 
 /* ---------- Wire up ---------- */
-window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); });
+window.addEventListener('hashchange', () => { wx.picker = false; document.activeElement?.blur(); render(); window.scrollTo(0, 0); $('#view').focus({ preventScroll: true }); });
 $('#refreshBtn').addEventListener('click', load);
 $('#langBtn').addEventListener('click', () => {
   state.lang = state.lang === 'pt' ? 'en' : 'pt';
   store.set('px_lang', state.lang);
+  document.activeElement?.blur();
   applyStaticText(); render();
 });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') load(); });

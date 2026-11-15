@@ -1,5 +1,5 @@
 """Collects the latest headlines from Portuguese news outlets' public RSS feeds, plus the
-IPMA weather forecast and warnings for Lisboa and Almada.
+IPMA weather forecast for Lisboa and Almada and the warnings for all of Portugal.
 
 Writes news.json with one list per section. Only the headline, a short excerpt from the
 feed, the source, the time and the link are kept: the full article stays on the outlet's site.
@@ -206,7 +206,7 @@ def og_image(link):
 
 def previous_run():
     """The last published news.json: its looked-up pictures (so each article page is only fetched once)
-    and its weather (kept if IPMA can't be reached this time)."""
+    and its weather (kept if IPMA can't be reached this time). The app fetches other places' forecasts itself."""
     repo = os.environ.get("GITHUB_REPOSITORY", "sandro91145/proximo")
     try:
         req = urllib.request.Request(f"https://raw.githubusercontent.com/{repo}/news-data/news.json", headers={"User-Agent": UA})
@@ -220,7 +220,12 @@ def previous_run():
 IPMA = "https://api.ipma.pt"
 # (key, name, IPMA location id, IPMA warning area)
 WEATHER_PLACES = [("lisboa", "Lisboa", 1110600, "LSB"), ("almada", "Almada", 1150300, "STB")]
-WARN_AREAS = {"LSB": "Lisboa", "STB": "Setúbal"}
+# IPMA warning areas: districts on the mainland, parts of Madeira and groups of the Azores.
+WARN_AREAS = {"AVR": "Aveiro", "BJA": "Beja", "BRG": "Braga", "BGC": "Bragança", "CBO": "Castelo Branco", "CBR": "Coimbra",
+              "EVR": "Évora", "FAR": "Faro", "GDA": "Guarda", "LRA": "Leiria", "LSB": "Lisboa", "PTG": "Portalegre",
+              "PTO": "Porto", "STM": "Santarém", "STB": "Setúbal", "VCT": "Viana do Castelo", "VRL": "Vila Real", "VIS": "Viseu",
+              "MCN": "Madeira, costa norte", "MCS": "Madeira, costa sul", "MRM": "Madeira, regiões montanhosas",
+              "MPS": "Porto Santo", "AOR": "Açores, grupo oriental", "ACE": "Açores, grupo central", "AOC": "Açores, grupo ocidental"}
 
 
 def get_json(url):
@@ -285,14 +290,14 @@ def weather(now):
                               "dir": r.get("ddVento") or "", "hum": num(r.get("hR"))})
         days.sort(key=lambda d: d["date"]); hours.sort(key=lambda h: h["t"])
         if days or hours:
-            out["places"][key] = {"name": name, "area": area, "days": days[:7], "hours": hours[:36]}
+            out["places"][key] = {"id": gid, "name": name, "area": area, "days": days[:7], "hours": hours[:36]}
             print(f"WEATHER {name}: {len(days)} days, {len(hours)} hours")
     try:
         for w in get_json(f"{IPMA}/open-data/forecast/warnings/warnings_www.json"):
             area, level = w.get("idAreaAviso"), (w.get("awarenessLevelID") or "").lower()
             end = lisbon_time(w.get("endTime"))
-            if area in WARN_AREAS and level in ("yellow", "orange", "red") and end and end > out["updated"]:
-                out["warnings"].append({"area": WARN_AREAS[area], "level": level, "type": w.get("awarenessTypeName") or "",
+            if area and level in ("yellow", "orange", "red") and end and end > out["updated"]:
+                out["warnings"].append({"code": area, "area": WARN_AREAS.get(area, area), "level": level, "type": w.get("awarenessTypeName") or "",
                                         "text": plain(w.get("text")), "start": lisbon_time(w.get("startTime")), "end": end})
         out["warnings"].sort(key=lambda w: (w["start"] or "", w["area"]))
         print(f"WEATHER warnings: {len(out['warnings'])}")

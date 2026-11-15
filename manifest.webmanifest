@@ -1,7 +1,7 @@
 {
   "name": "Próximo: notícias e greves",
   "short_name": "Próximo",
-  "description": "Notícias de fontes portuguesas fiáveis e greves nos transportes de Lisboa.",
+  "description": "Notícias de fontes portuguesas fiáveis, o tempo em Lisboa e Almada e greves nos transportes.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

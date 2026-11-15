@@ -88,7 +88,7 @@ SKIP_LINK = re.compile(r"/(extras|opiniao|opinion|cronica|cronicas|podcast|podca
 PAYWALL_LINK = re.compile(r"(observador\.pt|eco\.sapo\.pt)/(especiais|explicadores|fact-check|factcheck)/", re.I)
 PAYWALL_TEXT = re.compile(r"exclusiv[oa] (para|a) assinantes|exclusivo assinantes|premium-paywall|s[oó] para assinantes", re.I)
 # Shopping deals and sponsored posts aren't news.
-SKIP_TITLE = re.compile(r"^\s*\d{1,2}h\s*[-–.:]|\bquiz\b|black friday|cyber monday|cup[aã]o|c[oó]digo promocional|desconto|promo[cç][aã]o|aproveite|oferta especial|patrocinad", re.I)
+SKIP_TITLE = re.compile(r"^\s*\d{1,2}h\s*([-–.:]|(?=[A-ZÁÉÍÓÚÂÊÔÀÇ]))|\bquiz\b|black friday|cyber monday|cup[aã]o|c[oó]digo promocional|desconto|promo[cç][aã]o|aproveite|oferta especial|patrocinad", re.I)
 # Boilerplate some feeds put at the start of the excerpt.
 JUNK_SUMMARY = re.compile(r"^(se est[aá] a ler esta not[ií]cia numa app[^.]*\.?|leia mais[^.]*\.?)\s*", re.I)
 UA = "Proximo-news/1.0 (+https://github.com/sandro91145/proximo)"

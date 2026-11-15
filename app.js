@@ -1,5 +1,6 @@
 /* Próximo — news from reliable Portuguese outlets, plus strikes on Lisbon public transport.
- * news.json: headlines collected every hour from the outlets' public feeds (news-data branch).
+ * news.json: headlines collected every hour from the outlets' public feeds (news-data branch),
+ *   plus the IPMA weather forecast and warnings for Lisboa and Almada.
  * disruptions.json: strikes and disruptions, checked every morning from the news.
  * Plain JS, no build step.
  */
@@ -16,13 +17,14 @@ const HOME_PER_SECTION = 3;
 const SECTIONS = [
   { key: 'inicio', pt: 'Início', en: 'Home', accent: '--ink' },
   { key: 'transportes', pt: 'Transportes', en: 'Transport', accent: '--sec-transportes' },
+  { key: 'local', pt: 'Lisboa & Margem Sul', en: 'Lisbon & South Bank', accent: '--sec-local' },
   { key: 'portugal', pt: 'Portugal & Mundo', en: 'Portugal & World', accent: '--sec-portugal' },
   { key: 'economia', pt: 'Economia & Trabalho', en: 'Economy & Work', accent: '--sec-economia' },
   { key: 'tecnologia', pt: 'Tecnologia & Ciência', en: 'Tech & Science', accent: '--sec-tecnologia' },
   { key: 'desporto', pt: 'Desporto', en: 'Sport', accent: '--sec-desporto' },
 ];
 const accentOf = k => `var(${(SECTIONS.find(x => x.key === k) || SECTIONS[0]).accent})`;
-const NEWS_KEYS = ['portugal', 'economia', 'tecnologia', 'desporto'];
+const NEWS_KEYS = ['local', 'portugal', 'economia', 'tecnologia', 'desporto'];
 
 /* Transport operators: name, colour, official site (to confirm before travelling). */
 const OPS = {
@@ -52,12 +54,17 @@ const TEXT = {
     strikesAbout: 'A lista de greves é atualizada todas as manhãs a partir das notícias. Confirma sempre no site do operador antes de saíres.',
     newsChecked: x => `Notícias atualizadas ${x}.`,
     newsStale: x => `As notícias não são atualizadas desde ${x}.`,
-    newsAbout: 'Títulos e excertos dos feeds públicos de RTP, SIC Notícias, CNN Portugal, SAPO 24, Observador, ECO, O Jornal Económico, SAPO Tek, Pplware e Record, atualizados a cada hora. Só fontes que se leem sem pagar; artigos exclusivos para assinantes ficam de fora. Toca numa notícia para a ler no site do jornal.',
+    newsAbout: 'Títulos e excertos dos feeds públicos de RTP, SIC Notícias, CNN Portugal, SAPO 24, Observador, ECO, O Jornal Económico, SAPO Tek, Pplware, Record, A Mensagem de Lisboa, Lisboa Para Pessoas, Almadense e O Setubalense, atualizados a cada hora. Tempo: IPMA. Só fontes que se leem sem pagar; artigos exclusivos para assinantes ficam de fora. Toca numa notícia para a ler no site do jornal.',
     offline: 'Sem ligação: a mostrar a última versão guardada.',
     loadError: 'Não foi possível carregar.', loadErrorSub: 'Verifica a ligação e toca em Atualizar.',
     emptySection: 'Sem notícias recentes nesta secção.',
     minAgo: m => m < 1 ? 'agora' : `há ${m} min`, hAgo: h => `há ${h} h`,
     at: 'às', and: ' e ',
+    wxMax: 'Máx', wxMin: 'Mín', wxRain: 'Chuva', wxFeels: x => `Sensação ${x}°`, wxWind: x => `Vento ${x} km/h`,
+    wxSource: 'Previsão IPMA', wxNone: 'Previsão do tempo indisponível de momento.',
+    wxLevel: { yellow: 'Aviso amarelo', orange: 'Aviso laranja', red: 'Aviso vermelho' },
+    wxArea: a => `distrito de ${a}`, wxFrom: x => `a partir de ${x}`,
+    wxPlaces: 'Escolher local da previsão',
   },
   en: {
     refresh: 'Refresh', sourceCode: 'Source code and contact on GitHub', seeAll: 'See all', loading: 'Loading…',
@@ -74,12 +81,17 @@ const TEXT = {
     strikesAbout: 'The strike list is updated every morning from the news. Always check the operator’s website before you leave.',
     newsChecked: x => `News updated ${x}.`,
     newsStale: x => `The news hasn’t been updated since ${x}.`,
-    newsAbout: 'Headlines and excerpts from the public feeds of RTP, SIC Notícias, CNN Portugal, SAPO 24, Observador, ECO, O Jornal Económico, SAPO Tek, Pplware and Record, updated every hour. Only outlets you can read without paying; subscriber-only articles are left out. Tap a story to read it on the outlet’s site. Stories are in Portuguese.',
+    newsAbout: 'Headlines and excerpts from the public feeds of RTP, SIC Notícias, CNN Portugal, SAPO 24, Observador, ECO, O Jornal Económico, SAPO Tek, Pplware, Record, A Mensagem de Lisboa, Lisboa Para Pessoas, Almadense and O Setubalense, updated every hour. Weather: IPMA. Only outlets you can read without paying; subscriber-only articles are left out. Tap a story to read it on the outlet’s site. Stories are in Portuguese.',
     offline: 'Offline: showing the last saved version.',
     loadError: 'Couldn’t load.', loadErrorSub: 'Check your connection and tap Refresh.',
     emptySection: 'No recent news in this section.',
     minAgo: m => m < 1 ? 'now' : `${m} min ago`, hAgo: h => `${h} h ago`,
     at: 'at', and: ' and ',
+    wxMax: 'High', wxMin: 'Low', wxRain: 'Rain', wxFeels: x => `Feels like ${x}°`, wxWind: x => `Wind ${x} km/h`,
+    wxSource: 'IPMA forecast', wxNone: 'Weather forecast unavailable right now.',
+    wxLevel: { yellow: 'Yellow warning', orange: 'Orange warning', red: 'Red warning' },
+    wxArea: a => `${a} district`, wxFrom: x => `from ${x}`,
+    wxPlaces: 'Choose forecast place',
   },
 };
 
@@ -93,6 +105,7 @@ const store = {
 
 const state = {
   lang: store.get('px_lang', (navigator.language || 'pt').toLowerCase().startsWith('pt') ? 'pt' : 'en'),
+  wxPlace: store.get('px_wx_place', 'lisboa'),
   strikes: { data: store.get('px_disruptions', null), offline: false, error: false },
   news: { data: store.get('px_news', null), offline: false, error: false },
   loading: false,
@@ -255,7 +268,11 @@ function homeView() {
   txt.append(el('span', 'status-kicker', t('transportKicker')), el('span', 'status-title', state.strikes.error && !state.strikes.data ? t('loadError') : st.title));
   if (st.sub) txt.append(el('span', 'status-sub', st.sub));
   tr.append(ico, txt, el('span', 'status-go', '›'));
-  parts.push(tr);
+  const top = el('div', 'top-cards');
+  top.append(tr);
+  const wx = weatherCard();
+  if (wx) top.append(wx);
+  parts.push(top);
 
   const fr = freshness(state.news, NEWS_STALE_H, 'newsChecked', 'newsStale');
   if (fr.warn) parts.push(note(fr.warn));
@@ -273,7 +290,7 @@ function homeView() {
 
   const grid = el('div', 'home-grid');
   NEWS_KEYS.forEach(k => {
-    const items = newsItems(k).filter(i => !used.has(i.link));
+    const items = newsItems(k).filter(i => !used.has(i.link));  // a story already shown higher up isn't repeated
     if (!items.length) return;
     const sec = el('section', 'home-sec');
     sec.style.setProperty('--acc', accentOf(k));
@@ -285,7 +302,9 @@ function homeView() {
     const first = items.find(i => i.image) || items[0];
     sec.append(storyCard(first, 'feature', k));
     const ul = el('ul', 'rows');
-    items.filter(i => i !== first).slice(0, HOME_PER_SECTION).forEach(it => ul.append(storyRow(it)));
+    const rest = items.filter(i => i !== first).slice(0, HOME_PER_SECTION);
+    rest.forEach(it => ul.append(storyRow(it)));
+    [first, ...rest].forEach(i => used.add(i.link));
     sec.append(ul);
     grid.append(sec);
   });
@@ -366,6 +385,150 @@ function skeleton(big = false) {
   return s;
 }
 const TRANSPORT_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="5" y="3.5" width="14" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 10.5h14M8 17.5 6.5 20.5M16 17.5l1.5 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="1.2" fill="currentColor"/><circle cx="15" cy="14" r="1.2" fill="currentColor"/></svg>';
+
+/* ---------- Weather (IPMA, via news.json) ---------- */
+// IPMA weather type -> icon. 1 clear · 2,3,25 some cloud · 4,5,24,27 cloudy · rain · heavy rain · fog · snow · thunder.
+const WX_KIND = { 1: 'clear', 2: 'partly', 3: 'partly', 25: 'partly', 4: 'cloud', 5: 'cloud', 24: 'cloud', 27: 'cloud',
+  6: 'rain', 7: 'rain', 9: 'rain', 10: 'rain', 12: 'rain', 13: 'rain', 15: 'rain', 8: 'heavy', 11: 'heavy', 14: 'heavy', 21: 'heavy',
+  16: 'fog', 17: 'fog', 26: 'fog', 18: 'snow', 28: 'snow', 29: 'snow', 30: 'snow', 19: 'storm', 20: 'storm', 23: 'storm', 22: 'clear' };
+// Rough sunrise / sunset in Lisbon (UTC hours, mid-month) to show a moon at night.
+const SUN_UTC = [[7.9, 17.6], [7.5, 18.2], [6.9, 18.7], [6.2, 19.2], [5.6, 19.7], [5.2, 20.1], [5.4, 20.1], [5.8, 19.6], [6.3, 18.8], [6.8, 18.0], [7.3, 17.4], [7.8, 17.3]];
+function isNight(ts) {
+  const d = new Date(ts * 1000), h = d.getUTCHours() + d.getUTCMinutes() / 60, [r, st] = SUN_UTC[d.getUTCMonth()];
+  return h < r || h >= st;
+}
+const SUN_SVG = (cx, cy, r) => `<g class="i-sun"><circle cx="${cx}" cy="${cy}" r="${r}"/>${[0, 45, 90, 135, 180, 225, 270, 315].map(a => {
+  const c = Math.cos(a * Math.PI / 180), s = Math.sin(a * Math.PI / 180);
+  return `<line x1="${(cx + c * (r + 2.2)).toFixed(1)}" y1="${(cy + s * (r + 2.2)).toFixed(1)}" x2="${(cx + c * (r + 4.6)).toFixed(1)}" y2="${(cy + s * (r + 4.6)).toFixed(1)}"/>`;
+}).join('')}</g>`;
+const MOON_SVG = (x, y, k) => `<path class="i-moon" transform="translate(${x} ${y}) scale(${k})" d="M12.5 2.2A9.5 9.5 0 1 0 21.8 13.6 7.6 7.6 0 0 1 12.5 2.2z"/>`;
+const CLOUD_SVG = (x, y, k, cls = 'i-cloud') => `<path class="${cls}" transform="translate(${x} ${y}) scale(${k})" d="M7.5 21h15.2a5.3 5.3 0 0 0 .7-10.55A7.4 7.4 0 0 0 9.3 11.6 4.75 4.75 0 0 0 7.5 21z"/>`;
+const DROPS = n => `<g class="i-drop">${[[11, 25], [16, 26.5], [21, 25], [13.5, 29], [18.5, 30.5]].slice(0, n).map(([x, y]) => `<line x1="${x}" y1="${y}" x2="${x - 1.4}" y2="${y + 3}"/>`).join('')}</g>`;
+function wxIcon(type, night = false, size = 32) {
+  const k = WX_KIND[type] || 'cloud';
+  let g;
+  if (k === 'clear') g = night ? MOON_SVG(4, 4, 1.05) : SUN_SVG(16, 16, 6.5);
+  else if (k === 'partly') g = (night ? MOON_SVG(2, 1, 0.75) : SUN_SVG(11.5, 11, 5)) + CLOUD_SVG(4, 5, 0.95);
+  else if (k === 'cloud') g = CLOUD_SVG(2, 3, 1.05);
+  else if (k === 'fog') g = CLOUD_SVG(3, -1, 0.95) + '<g class="i-fog"><line x1="6" y1="24" x2="26" y2="24"/><line x1="9" y1="28.5" x2="23" y2="28.5"/></g>';
+  else if (k === 'snow') g = CLOUD_SVG(3, -3, 0.95) + '<g class="i-snow"><circle cx="11" cy="25.5" r="1.6"/><circle cx="16.5" cy="28.5" r="1.6"/><circle cx="21.5" cy="25.5" r="1.6"/></g>';
+  else if (k === 'storm') g = CLOUD_SVG(3, -3, 0.95, 'i-cloud dark') + '<path class="i-bolt" d="M17.5 19.5 12.5 26.5h4l-1.8 5 6-7.5h-4l1.8-4.5z"/>';
+  else g = CLOUD_SVG(3, -3, 0.95, k === 'heavy' ? 'i-cloud dark' : 'i-cloud') + DROPS(k === 'heavy' ? 5 : 3);
+  return `<svg class="wx-ico" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true">${g}</svg>`;
+}
+const wxDesc = (w, type) => (w.types?.[String(type)] || [])[state.lang === 'pt' ? 0 : 1] || '';
+const WARN_EN = { 'Precipitação': 'Rain', 'Vento': 'Wind', 'Agitação Marítima': 'Rough seas', 'Nevoeiro': 'Fog', 'Tempo Quente': 'Hot weather',
+  'Tempo Frio': 'Cold weather', 'Trovoada': 'Thunderstorms', 'Neve': 'Snow' };
+const warnType = x => state.lang === 'en' ? (WARN_EN[x] || x) : x;
+const temp = v => v == null ? '–' : `${v}°`;
+const lisbonDate = ts => dayKey(ts);
+
+// Short facts separated by dots (the separator is drawn by CSS so the spacing is even).
+function dots(cls, list) {
+  const s = el('span', cls + ' dots');
+  list.filter(Boolean).forEach(x => s.append(el('span', null, x)));
+  return s;
+}
+function weatherCard() {
+  const w = state.news.data?.weather;
+  if (!state.news.data) return null;
+  const card = el('section', 'wx');
+  const places = w?.places || {};
+  const keys = Object.keys(places);
+  if (!keys.length) { card.append(el('p', 'wx-none', t('wxNone'))); return card; }
+  const key = places[state.wxPlace] ? state.wxPlace : keys[0];
+  const p = places[key];
+  const now = nowS();
+
+  // Place switch + source
+  const head = el('div', 'wx-head');
+  const sw = el('div', 'wx-switch'); sw.setAttribute('role', 'group'); sw.setAttribute('aria-label', t('wxPlaces'));
+  keys.forEach(k => {
+    const b = el('button', 'wx-place', places[k].name); b.type = 'button';
+    b.setAttribute('aria-pressed', String(k === key));
+    b.addEventListener('click', () => { state.wxPlace = k; store.set('px_wx_place', k); render(); });
+    sw.append(b);
+  });
+  const src = el('a', 'wx-src', t('wxSource'));
+  src.href = 'https://www.ipma.pt/pt/otempo/prev.localidade.hora/'; src.target = '_blank'; src.rel = 'noopener';
+  head.append(sw, src);
+  // main: place, now, warnings · fore: next hours and days (side by side on wide screens)
+  const main = el('div', 'wx-main'), fore = el('div', 'wx-fore');
+  main.append(head);
+
+  // Now: the hourly forecast for the current hour; today's high / low / rain.
+  const hours = (p.hours || []).map(h => ({ ...h, ts: Date.parse(h.t) / 1000 })).filter(h => h.ts);
+  const cur = hours.filter(h => h.ts <= now).at(-1) || hours[0];
+  const today = (p.days || []).find(d => d.date === lisbonDate(now)) || (p.days || [])[0];
+  const nowRow = el('div', 'wx-now');
+  const type = cur?.type ?? today?.type;
+  const ico = el('span', 'wx-now-ico'); ico.innerHTML = wxIcon(type, cur ? isNight(cur.ts) : false, 56);
+  const big = el('span', 'wx-temp', cur ? temp(cur.temp) : `${temp(today?.max)}`);
+  const info = el('div', 'wx-info');
+  info.append(el('span', 'wx-desc', wxDesc(w, type) || ''));
+  const bits = [];
+  if (today) bits.push(`${t('wxMax')} ${temp(today.max)}`, `${t('wxMin')} ${temp(today.min)}`);
+  if (today?.rain != null) bits.push(`${t('wxRain')} ${today.rain}%`);
+  info.append(dots('wx-sub', bits));
+  const extra = [];
+  if (cur?.feels != null && cur.temp != null && Math.abs(cur.feels - cur.temp) >= 2) extra.push(t('wxFeels', cur.feels));
+  if (cur?.wind != null && cur.wind >= 20) extra.push(t('wxWind', cur.wind));
+  if (extra.length) info.append(dots('wx-sub', extra));
+  nowRow.append(ico, big, info);
+  main.append(nowRow);
+
+  // IPMA warnings for this place's district (Almada is in the Setúbal district).
+  const area = p.area === 'STB' ? 'Setúbal' : 'Lisboa';
+  (w.warnings || [])
+    .filter(x => x.area === area && Date.parse(x.end) / 1000 > now)
+    .forEach(x => {
+      const s = Date.parse(x.start) / 1000, e = Date.parse(x.end) / 1000;
+      const when = s > now ? t('wxFrom', `${lc(dayLabel(s))} ${clock(s)}`) : t('until', (dayKey(e) === dayKey(now) ? '' : lc(dayLabel(e)) + ' ') + clock(e));
+      const box = el('p', 'wx-warn ' + x.level);
+      box.append(el('strong', null, `${t('wxLevel')[x.level] || ''}: ${warnType(x.type)}`), dots('wx-warn-when', [t('wxArea', x.area), when]));
+      if (x.text) box.append(el('span', 'wx-warn-text', x.text));
+      main.append(box);
+    });
+
+  // Next 12 hours
+  const next = hours.filter(h => h.ts > now - 1800).slice(cur && cur.ts <= now ? 1 : 0, 13);
+  if (next.length) {
+    const strip = el('ol', 'wx-hours');
+    next.forEach(h => {
+      const li = el('li');
+      li.append(el('span', 'wx-h', clock(h.ts).slice(0, 2) + 'h'));
+      const i = el('span'); i.innerHTML = wxIcon(h.type, isNight(h.ts), 28); li.append(i);
+      li.append(el('span', 'wx-t', temp(h.temp)));
+      li.append(el('span', 'wx-r' + (h.rain >= 50 ? ' hi' : ''), h.rain != null && h.rain >= 10 ? `${h.rain}%` : ''));
+      li.title = wxDesc(w, h.type);
+      strip.append(li);
+    });
+    if (!next.some(h => h.rain != null && h.rain >= 10)) strip.classList.add('no-rain');
+    fore.append(strip);
+  }
+
+  // Next days
+  const days = (p.days || []).filter(d => d.date >= lisbonDate(now)).slice(0, 5);
+  if (days.length > 1) {
+    const ul = el('ol', 'wx-days');
+    days.forEach(d => {
+      const ts = Date.parse(d.date + 'T12:00:00Z') / 1000;
+      const li = el('li');
+      const name = d.date === lisbonDate(now) ? t('today') : cap(new Intl.DateTimeFormat(locale(), { timeZone: TZ, weekday: 'short' }).format(new Date(ts * 1000)).replace('.', ''));
+      li.append(el('span', 'wx-d', name));
+      const i = el('span'); i.innerHTML = wxIcon(d.type, false, 28); li.append(i);
+      const tt = el('span', 'wx-mm'); tt.append(el('b', null, temp(d.max)), ' ', el('span', null, temp(d.min)));
+      li.append(tt);
+      li.append(el('span', 'wx-r' + (d.rain >= 50 ? ' hi' : ''), d.rain != null && d.rain >= 10 ? `${d.rain}%` : ''));
+      li.title = wxDesc(w, d.type);
+      ul.append(li);
+    });
+    fore.append(ul);
+  }
+  card.append(main);
+  if (fore.childNodes.length) card.append(fore);
+  return card;
+}
 
 function transportView() {
   const parts = [];

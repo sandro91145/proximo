@@ -1,6 +1,6 @@
 # Próximo
 
-News from reliable Portuguese outlets, plus strikes and disruptions on Lisbon public transport.
+News from reliable Portuguese outlets, the weather for Lisboa and Almada, plus strikes and disruptions on Lisbon public transport.
 An installable web app (PWA) for phone and PC, no build step.
 
 The journey planner, saved trips, journey mode and map were removed in November 2026.
@@ -8,20 +8,32 @@ That version is kept on the `travel-version` branch.
 
 ## Sections
 
-A row of selectors at the top: **Início** (home), **Transportes**, **Portugal & Mundo**, **Economia & Trabalho**,
-**Tecnologia & Ciência** and **Desporto**. The home page shows the transport status and the top headlines of each
-section; each section shows its latest headlines with source, time and a short excerpt, linking to the full article.
+A row of selectors at the top: **Início** (home), **Transportes**, **Lisboa & Margem Sul**, **Portugal & Mundo**, **Economia & Trabalho**,
+**Tecnologia & Ciência** and **Desporto**. The home page shows the transport status, the weather and the top headlines of each
+section (a story is never shown twice); each section shows its latest headlines with source, time and a short excerpt, linking to the full article.
 
 ### News
 
 `scripts/collect_news.py` reads the public RSS feeds of RTP Notícias, SIC Notícias, CNN Portugal, SAPO 24, Observador,
-ECO, O Jornal Económico, SAPO Tek, Pplware and Record: only outlets that can be read without paying (Expresso, Público and Jornal de Negócios were
+ECO, O Jornal Económico, SAPO Tek, Pplware and Record, and the local outlets A Mensagem de Lisboa, Lisboa Para Pessoas,
+Almadense and O Setubalense: only outlets that can be read without paying (Expresso, Público and Jornal de Negócios were
 removed for their paywalls). Subscriber-only articles of Observador and ECO are filtered out. General feeds are sorted into sections by each story's
 own category labels or link. Duplicates across outlets are merged; opinion pieces, radio programmes, live blogs,
 quizzes and shopping deals are skipped; stories older than 48 hours are dropped. Only the headline, a short excerpt,
 the source, the time, the link and the picture the outlet provides for sharing are kept.
 When a feed has no picture for a top story, the article page's sharing image (og:image) is looked up,
-at most 45 pages per run and each page only once.
+at most 55 pages per run and each page only once.
+
+**Lisboa & Margem Sul** gathers the local outlets' stories (up to 7 days old; O Setubalense only for Almada, Seixal,
+Barreiro, Moita, Montijo, Alcochete, Setúbal, Sesimbra and Palmela) plus any national story whose headline names a place
+in Lisbon or the Margem Sul (sport and phrases like "Bolsa de Lisboa" excluded).
+
+### Weather
+
+The same script reads IPMA's open data (no key): the hourly and daily forecast for Lisboa and Almada and the active
+yellow, orange or red warnings for the Lisboa and Setúbal districts (Almada is in the Setúbal district). The home page
+shows the current hour, today's high/low and rain chance, the next 12 hours, the next 5 days and any warning, with a
+Lisboa / Almada switch that the app remembers. If IPMA can't be reached, the previous forecast is kept.
 
 `.github/workflows/news.yml` runs it every hour and publishes `news.json` to the `news-data` branch (a single commit,
 replaced each time). The app reads it from `raw.githubusercontent.com`. No secrets or Claude usage needed.

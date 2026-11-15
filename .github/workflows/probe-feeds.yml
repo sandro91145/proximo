@@ -1,0 +1,38 @@
+# Temporary: checks candidate local news feeds. Will be deleted after use.
+name: Probe feeds
+on: { workflow_dispatch: {} }
+permissions: { contents: read }
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import importlib.util, collections, urllib.request, json
+          spec = importlib.util.spec_from_file_location("c", "scripts/collect_news.py"); c = importlib.util.module_from_spec(spec); spec.loader.exec_module(c)
+          urls = [
+            "https://amensagem.pt/feed/", "https://lisboaparapessoas.pt/feed/", "https://ocorvo.pt/feed/",
+            "https://www.setubalnarede.pt/feed/", "https://osetubalense.com/feed/", "https://www.rostos.pt/feed/",
+            "https://www.diariodaregiao.pt/feed/", "https://www.cm-almada.pt/rss", "https://www.lisboa.pt/rss",
+            "https://informacao.lisboa.pt/rss", "https://www.cm-seixal.pt/rss.xml", "https://www.almadense.pt/feed/",
+          ]
+          for u in urls:
+              try:
+                  es = c.fetch_entries(u)
+                  dates = sorted([e["date"] for e in es if e["date"]], reverse=True)
+                  pay = sum(1 for e in es if c.PAYWALL_TEXT.search(e["raw"] or ""))
+                  imgs = sum(1 for e in es if e["image"])
+                  print(f"OK   {u} items={len(es)} newest={dates[0] if dates else None} 10th={dates[min(9,len(dates)-1)] if dates else None} pay={pay} imgs={imgs}")
+                  for e in es[:3]: print(f"       - {e['title'][:90]} | {e['link'][:70]}")
+              except Exception as ex:
+                  print(f"FAIL {u} {str(ex)[:120]}")
+          for u in ["https://api.ipma.pt/open-data/forecast/meteorology/cities/daily/1110600.json", "https://api.ipma.pt/open-data/forecast/warnings/warnings_www.json"]:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": c.UA}), timeout=20) as r:
+                      d = json.load(r)
+                  print("IPMA OK", u, (d.get("dataUpdate") if isinstance(d, dict) else len(d)))
+              except Exception as ex:
+                  print("IPMA FAIL", u, ex)
+          PY

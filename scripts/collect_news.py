@@ -1,4 +1,5 @@
-"""Collects the latest headlines from Portuguese news outlets' public RSS feeds.
+"""Collects the latest headlines from Portuguese news outlets' public RSS feeds, plus the
+IPMA weather forecast and warnings for Lisboa and Almada.
 
 Writes news.json with one list per section. Only the headline, a short excerpt from the
 feed, the source, the time and the link are kept: the full article stays on the outlet's site.
@@ -18,6 +19,7 @@ from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 
 SECTIONS = {
+    "local": "Lisboa & Margem Sul",
     "portugal": "Portugal & Mundo",
     "economia": "Economia & Trabalho",
     "tecnologia": "Tecnologia & Ciência",
@@ -42,7 +44,27 @@ FEEDS = [
     ("Pplware", "https://pplware.sapo.pt/feed/", "tecnologia"),
     ("SAPO Tek", "https://tek.sapo.pt/rss", "tecnologia"),
     ("Record", "https://www.record.pt/rss", "desporto"),
+    # Local outlets (free). "local:place" keeps only stories about a place in Lisbon / Margem Sul.
+    ("A Mensagem de Lisboa", "https://amensagem.pt/feed/", "local"),
+    ("Lisboa Para Pessoas", "https://lisboaparapessoas.pt/feed/", "local"),
+    ("Almadense", "https://www.almadense.pt/feed/", "local"),
+    ("O Setubalense", "https://osetubalense.com/feed/", "local:place"),
 ]
+# Tried for the local section and left out: O Corvo, Setúbal na Rede, Diário da Região, Seixal council (broken feeds),
+# Rostos and Almada council (no feed), Lisboa council (blocks feed readers).
+
+# Stories from the general feeds whose headline names one of these places also go to "Lisboa & Margem Sul".
+PLACES = re.compile(r"\b(" + "|".join([
+    "lisboa", "lisboetas?", "almada", "almadenses?", "seixal", "barreiro", "moita", "montijo", "alcochete", "setubal",
+    "sesimbra", "palmela", "amadora", "oeiras", "cascais", "sintra", "loures", "odivelas", "vila franca de xira", "mafra",
+    "caparica", "cacilhas", "cova da piedade", "laranjeiro", "feijo", "charneca", "corroios", "fernao ferro", "pragal",
+    "margem sul", "ponte 25 de abril", "ponte vasco da gama", "metro sul do tejo", "fertagus", "transtejo", "soflusa",
+    "carris", "metro de lisboa", "arco ribeirinho", "baixa chiado", "alfama", "mouraria", "benfica (bairro|freguesia)",
+]) + r")\b")
+# …except where the place name means something else.
+NOT_LOCAL = re.compile(r"\b(bolsa de lisboa|tratado de lisboa|euronext|psi|sporting|benfica|belenenses|vitoria de setubal|"
+                       r"estoril open|web summit|liga|taca|jogo|golo|treinador)\b")
+LOCAL_MAX_AGE = timedelta(days=7)   # local outlets publish a few stories a day, not dozens
 
 # For "auto" feeds, checked in this order: words in a story's categories or link path.
 AUTO_RULES = [
@@ -58,9 +80,9 @@ AUTO_RULES = [
 
 MAX_PER_SECTION = 40
 OG_PER_SECTION = 14   # look up missing pictures for this many stories per section…
-OG_BUDGET = 45        # …and at most this many article pages per run
+OG_BUDGET = 55        # …and at most this many article pages per run
 MAX_AGE = timedelta(hours=48)
-SKIP_LINK = re.compile(r"/(extras|opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto)/|-em-direto\b", re.I)
+SKIP_LINK = re.compile(r"/(extras|opiniao|opinion|cronica|cronicas|podcast|podcasts|programas|video|videos|fotogaleria|publicidade|patrocinado|em-direto|almalab|desporto-local)/|-em-direto\b", re.I)
 # Paid articles of mostly free outlets: Observador's and ECO's subscriber sections, and items whose feed
 # content says they're for subscribers only (ECO marks these).
 PAYWALL_LINK = re.compile(r"(observador\.pt|eco\.sapo\.pt)/(especiais|explicadores|fact-check|factcheck)/", re.I)
@@ -182,15 +204,102 @@ def og_image(link):
         return ""
 
 
-def previous_og():
-    """Pictures already looked up in the last run, so each article page is only fetched once."""
+def previous_run():
+    """The last published news.json: its looked-up pictures (so each article page is only fetched once)
+    and its weather (kept if IPMA can't be reached this time)."""
     repo = os.environ.get("GITHUB_REPOSITORY", "sandro91145/proximo")
     try:
         req = urllib.request.Request(f"https://raw.githubusercontent.com/{repo}/news-data/news.json", headers={"User-Agent": UA})
         with urllib.request.urlopen(req, timeout=15) as r:
-            return json.load(r).get("og", {}) or {}
+            return json.load(r) or {}
     except Exception:
         return {}
+
+
+# ---------- Weather (IPMA open data, no key needed) ----------
+IPMA = "https://api.ipma.pt"
+# (key, name, IPMA location id, IPMA warning area)
+WEATHER_PLACES = [("lisboa", "Lisboa", 1110600, "LSB"), ("almada", "Almada", 1150300, "STB")]
+WARN_AREAS = {"LSB": "Lisboa", "STB": "Setúbal"}
+
+
+def get_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+def lisbon_time(s):
+    """IPMA times are Lisbon local time without an offset. Returns ISO UTC ('…Z') or None."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        try:
+            from zoneinfo import ZoneInfo
+            d = d.replace(tzinfo=ZoneInfo("Europe/Lisbon"))
+        except Exception:
+            d = d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def num(v, nd=0):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f <= -99:
+        return None  # IPMA's "no value"
+    return round(f, nd) if nd else int(round(f))
+
+
+def weather(now):
+    out = {"updated": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"), "places": {}, "warnings": [], "types": {}}
+    try:
+        for t in get_json(f"{IPMA}/open-data/weather-type-classe.json").get("data", []):
+            out["types"][str(t["idWeatherType"])] = [t.get("descWeatherTypePT", ""), t.get("descWeatherTypeEN", "")]
+    except Exception as e:
+        print(f"WEATHER types failed: {e}")
+    for key, name, gid, area in WEATHER_PLACES:
+        try:
+            rows = get_json(f"{IPMA}/public-data/forecast/aggregate/{gid}.json")
+        except Exception as e:
+            print(f"WEATHER {name} failed: {e}")
+            continue
+        days, hours = [], []
+        for r in rows:
+            per, when = r.get("idPeriodo"), lisbon_time(r.get("dataPrev"))
+            if not when:
+                continue
+            if per == 24:
+                days.append({"date": (r.get("dataPrev") or "")[:10], "min": num(r.get("tMin")), "max": num(r.get("tMax")),
+                             "type": num(r.get("idTipoTempo")), "rain": num(r.get("probabilidadePrecipita")),
+                             "uv": num(r.get("iUv"), 1), "wind": r.get("ddVento") or ""})
+            elif per == 1 and when >= (now - timedelta(hours=1)).isoformat()[:19]:
+                hours.append({"t": when, "temp": num(r.get("tMed")), "feels": num(r.get("utci")), "type": num(r.get("idTipoTempo")),
+                              "rain": num(r.get("probabilidadePrecipita")), "wind": num(r.get("ffVento")),
+                              "dir": r.get("ddVento") or "", "hum": num(r.get("hR"))})
+        days.sort(key=lambda d: d["date"]); hours.sort(key=lambda h: h["t"])
+        if days or hours:
+            out["places"][key] = {"name": name, "area": area, "days": days[:7], "hours": hours[:36]}
+            print(f"WEATHER {name}: {len(days)} days, {len(hours)} hours")
+    try:
+        for w in get_json(f"{IPMA}/open-data/forecast/warnings/warnings_www.json"):
+            area, level = w.get("idAreaAviso"), (w.get("awarenessLevelID") or "").lower()
+            end = lisbon_time(w.get("endTime"))
+            if area in WARN_AREAS and level in ("yellow", "orange", "red") and end and end > out["updated"]:
+                out["warnings"].append({"area": WARN_AREAS[area], "level": level, "type": w.get("awarenessTypeName") or "",
+                                        "text": plain(w.get("text")), "start": lisbon_time(w.get("startTime")), "end": end})
+        out["warnings"].sort(key=lambda w: (w["start"] or "", w["area"]))
+        print(f"WEATHER warnings: {len(out['warnings'])}")
+    except Exception as e:
+        print(f"WEATHER warnings failed: {e}")
+        out["warnings"] = None  # unknown, not "none"
+    return out if out["places"] else None
 
 
 def fetch_entries(url):
@@ -256,23 +365,29 @@ def main(out_path):
                 continue
             if any(fold(c).strip() in ("opiniao", "opinion", "cronica", "publicidade", "conteudo patrocinado") for c in en["categories"]):
                 continue
-            if section.startswith("auto"):
+            place = PLACES.search(fold(title)) and not NOT_LOCAL.search(fold(title))
+            if section == "local:place":
+                sec = "local" if place or re.search(r"/local/(almada|seixal|barreiro|moita|montijo|alcochete|setubal|sesimbra|palmela)/", link) else None
+            elif section.startswith("auto"):
                 sec = auto_section(en) or (section.split(":", 1)[1] if ":" in section else None)
             else:
                 sec = section
             if sec not in items:
                 continue
             ts = en["date"]
-            if ts and (now - ts > MAX_AGE or ts - now > timedelta(hours=2)):
+            if ts and (now - ts > (LOCAL_MAX_AGE if sec == "local" else MAX_AGE) or ts - now > timedelta(hours=2)):
                 continue
-            items[sec].append({
+            entry = {
                 "title": title,
                 "link": link,
                 "source": source,
                 "time": ts.replace(microsecond=0).isoformat().replace("+00:00", "Z") if ts else None,
                 "summary": plain(JUNK_SUMMARY.sub("", plain(en["summary"])), 220),
                 "image": en["image"],
-            })
+            }
+            items[sec].append(entry)
+            if place and sec not in ("local", "desporto"):
+                items["local"].append(dict(entry))  # a national story about Lisbon / Margem Sul shows in both
             kept += 1
         with_img = sum(1 for en in entries if en["image"])
         report.append({"source": source, "url": url, "ok": True, "entries": len(entries), "kept": kept, "with_image": with_img})
@@ -295,7 +410,8 @@ def main(out_path):
 
     # Pictures for stories whose feed has none (or only a tiny thumbnail): read og:image from the article page.
     # Only the first stories of each section, at most OG_BUDGET new pages per run, remembered between runs.
-    cache, og, budget = previous_og(), {}, OG_BUDGET
+    prev = previous_run()
+    cache, og, budget = prev.get("og", {}) or {}, {}, OG_BUDGET
     for sec in out["sections"].values():
         for idx, it in enumerate(sec["items"]):
             if it["image"] and not SMALL_IMG.search(it["image"]):
@@ -318,6 +434,10 @@ def main(out_path):
     print(f"PICTURES looked up: {OG_BUDGET - budget} new, {sum(1 for v in og.values() if v)} found of {len(og)} tried/remembered")
     for key, sec in out["sections"].items():
         print(f"IMAGES {key}: {sum(1 for i in sec['items'] if i['image'])}/{len(sec['items'])}")
+
+    out["weather"] = weather(now) or prev.get("weather")
+    if not out["weather"]:
+        print("WEATHER: none (IPMA unreachable and no previous forecast)")
 
     total = sum(len(s["items"]) for s in out["sections"].values())
     if total == 0:

@@ -1,4 +1,4 @@
-# Collects the latest headlines every hour and publishes them as news.json on the
+# Collects the latest headlines every 15 minutes and publishes them as news.json on the
 # "news-data" branch (one commit, replaced each time, so main's history stays clean).
 # The app reads it from raw.githubusercontent.com. No secrets or Claude usage needed.
 
@@ -6,7 +6,9 @@ name: Update news
 
 on:
   schedule:
-    - cron: '7 * * * *'   # every hour at :07 (GitHub may start a few minutes late)
+    # Every 15 minutes, off the busy :00. GitHub skips many scheduled runs on small repos
+    # (an hourly schedule ran only ~4 times a day), so asking more often keeps the news fresh.
+    - cron: '4,19,34,49 * * * *'
   workflow_dispatch: {}
 
 permissions:

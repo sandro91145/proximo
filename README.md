@@ -39,7 +39,7 @@ neighbourhoods and the islands) and a *Use my location* button that picks the ne
 on the device as quick buttons, each removable. The app reads the chosen place's forecast straight from IPMA (it allows
 browsers to) and keeps the last one for offline use; for Lisboa and Almada it falls back to the copy in news.json.
 
-`.github/workflows/news.yml` runs it every hour and publishes `news.json` to the `news-data` branch (a single commit,
+`.github/workflows/news.yml` runs it every 15 minutes (GitHub skips some scheduled runs) and publishes `news.json` to the `news-data` branch (a single commit,
 replaced each time). The app reads it from `raw.githubusercontent.com`. No secrets or Claude usage needed.
 
 ### Transportes

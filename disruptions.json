@@ -1,5 +1,16 @@
 {
-  "updated": "2026-11-25T16:10:00+00:00",
+  "updated": "2026-11-26T15:55:00+00:00",
   "note": "Strikes and major disruptions in the Lisbon area, today to 7 days ahead. Written by the daily news check. operator keys: metro, mts, boat, cp, fertagus, cm, carris, tcb. scope: full = no normal service in the window (app avoids it automatically); partial = some service affected (app only warns).",
-  "items": []
+  "items": [
+    {
+      "operator": "cp",
+      "kind": "strike",
+      "scope": "partial",
+      "title": "Greve dos maquinistas da CP (SMAQ) – últimos dias, 26 e 27 de novembro",
+      "start": "2026-11-26T00:00:00+00:00",
+      "end": "2026-11-27T23:59:00+00:00",
+      "minimum": "Serviços mínimos decretados para 24 e 25 de novembro; para 26 e 27 ainda sem informação confirmada.",
+      "source": "https://www.publico.pt/2026/11/24/sociedade/noticia/greve-maquinistas-cp-86-comboios-suprimidos-ate-7h-paralisacao-total-ate-quarta-2196069"
+    }
+  ]
 }
